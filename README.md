@@ -1,6 +1,6 @@
 # SingleBehaviorLab
 
-**SingleBehaviorLab** is a desktop application for semi-automated annotation, training, and analysis of animal behavior from video. It combines a frozen [VideoPrism](https://github.com/google-deepmind/videoprism) video backbone with trainable classification heads and [SAM2](https://github.com/facebookresearch/sam2)-based segmentation, enabling few-shot behavior recognition from raw video with minimal manual labeling.
+**SingleBehaviorLab** is a tool for behavior action localization in animal video. It supports lightweight few-shot training of behavior classifiers — referred to here as *behavior sequencing* — along with unsupervised behavior discovery for exploring unlabeled recordings, and a full GUI pipeline for downstream analysis: frame-level review, ethograms, transition statistics, and annotated video export.
 
 ---
 
