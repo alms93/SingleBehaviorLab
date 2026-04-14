@@ -1,6 +1,6 @@
 # SingleBehaviorLab
 
-**SingleBehaviorLab** is a tool for behavior action localization in animal video. It supports lightweight few-shot training of behavior classifiers, referred to here as *behavior sequencing*, along with unsupervised behavior discovery for exploring unlabeled recordings, and a full GUI pipeline for downstream analysis: ethograms, behavior clustering, transition state analysis, and more comprehesive tools focused on postprocessing.
+**SingleBehaviorLab (SBL)** is a tool for behavior action localization in animal video. It supports lightweight few-shot training of behavior classifiers, referred to here as *behavior sequencing*, along with unsupervised behavior discovery for exploring unlabeled recordings, and a full GUI pipeline for downstream analysis: ethograms, behavior clustering, transition state analysis, and more comprehesive tools focused on postprocessing.
 
 **SBL demo videos:**
 
