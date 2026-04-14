@@ -1,0 +1,85 @@
+# SingleBehaviorLab Configuration
+# Paths below are resolved relative to the app directory on first launch.
+# They will be updated automatically when you create or load an experiment.
+
+# --- Paths (leave blank; auto-resolved at startup) ---
+data_dir:
+raw_videos_dir:
+clips_dir:
+annotations_dir:
+models_dir:
+backbone_dir:
+annotation_file:
+experiments_dir:
+experiment_name:
+experiment_path:
+config_path:
+
+# --- Video extraction defaults ---
+default_target_fps: 12
+default_clip_length: 8
+default_step_frames: 8
+
+# --- Training defaults ---
+default_batch_size: 16
+default_epochs: 60
+default_learning_rate: 0.0005
+default_weight_decay: 0.001
+
+# --- Model ---
+videoprism_model_name: videoprism_public_v1_base
+backbone_model: videoprism_public_v1_base
+resolution: 288
+model_input_size:
+  - 288
+  - 288
+
+# --- Training options ---
+default_use_scheduler: true
+default_use_ema: true
+default_map_num_queries: 1
+default_use_class_map: false
+default_use_cosine: false
+default_use_label_smoothing: false
+default_use_supcon_loss: true
+default_supcon_temp: 0.07
+default_supcon_weight: 0.5
+default_use_focal_loss: true
+default_focal_gamma: 2.0
+
+# --- Last training session (auto-updated by app) ---
+last_training:
+  parameters:
+    batch_size: 16
+    epochs: 60
+    lr: 0.0005
+    use_scheduler: true
+    weight_decay: 0.001
+    clip_length: 8
+    val_split: 0.2
+    use_class_weights: false
+    use_label_smoothing: false
+    use_supcon_loss: true
+    supcon_temp: 0.07
+    supcon_weight: 0.5
+    use_triplet_loss: false
+    triplet_margin: 0.2
+    triplet_weight: 0.5
+    use_focal_loss: true
+    focal_gamma: 2.0
+    use_weighted_sampler: true
+    use_augmentation: true
+    limit_classes: true
+    limit_per_class: false
+  selected_classes: []
+  per_class_limits: {}
+  head:
+    dropout: 0.25
+    map_head_kwargs:
+      num_heads: 4
+      mlp_ratio: 4.0
+      num_queries: 1
+      use_class_map: false
+      use_cosine: false
+  pretrained_path:
+  output_path:

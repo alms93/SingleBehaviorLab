@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "singlebehaviorlab"
+version = "1.3.2"
+description = "Semi-automated behavioral video annotation, training, and analysis tool"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "Almir Aljovic" }]
+maintainers = [{ name = "Almir Aljovic" }]
+
+# Core dependencies installable from PyPI.
+# PyTorch and JAX require CUDA-specific index URLs — install those first
+# using install.sh, or manually before running `pip install singlebehaviorlab`.
+dependencies = [
+    "PyQt6==6.11.0",
+    "PyQt6-WebEngine==6.11.0",
+    "PyYAML==6.0.3",
+    "numpy==2.2.6",
+    "h5py==3.14.0",
+    "opencv-python==4.13.0.92",
+    "Pillow==12.1.1",
+    "scipy==1.15.3",
+    "eva-decord==0.6.1",
+    "scikit-learn==1.7.2",
+    "pandas==2.3.3",
+    "umap-learn==0.5.11",
+    "leidenalg==0.11.0",
+    "python-igraph==1.0.0",
+    "hdbscan==0.8.42",
+    "plotly==6.6.0",
+    "matplotlib==3.10.8",
+    "flax==0.10.7",
+    # torch and jax are intentionally omitted here because they require
+    # CUDA-specific index URLs. Install them first with install.sh.
+]
+
+[project.optional-dependencies]
+# GPU stack — install manually (see INSTALL.md) or via install.sh
+gpu = [
+    "torch==2.6.0",
+    "torchvision==0.21.0",
+    "jax==0.6.2",
+    "jaxlib==0.6.2",
+]
+# SAM2 segmentation — installed from bundled sam2_backend/ or GitHub
+sam2 = [
+    "sam2 @ git+https://github.com/facebookresearch/sam2.git",
+]
+test = ["pytest", "pytest-cov"]
+
+[project.scripts]
+# After `pip install .` the user can launch the app with just `singlebehaviorlab`
+singlebehaviorlab = "singlebehaviorlab.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests that load models or process video (deselect with '-m \"not slow\"')",
+    "gpu: marks tests that require a CUDA GPU",
+]
+
+[tool.setuptools.packages.find]
+# Only include the singlebehaviorlab package; exclude everything else at root
+include = ["singlebehaviorlab*"]
+
+[tool.setuptools.package-data]
+# Bundle the template config and training presets as non-code package data
+singlebehaviorlab = [
+    "data/config/config.yaml",
+    "data/training_profiles.json",
+]

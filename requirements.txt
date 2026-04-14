@@ -1,0 +1,40 @@
+# SingleBehaviorLab — Python dependencies
+# Install via install.sh (recommended) or manually (see INSTALL.md).
+#
+# PyTorch and JAX require CUDA-specific index URLs handled by install.sh.
+
+# GUI
+PyQt6==6.11.0
+PyQt6-WebEngine==6.11.0
+PyYAML==6.0.3
+
+# Vision / video
+numpy==2.2.6
+h5py==3.14.0
+opencv-python==4.13.0.92
+Pillow==12.1.1
+scipy==1.15.3
+eva-decord==0.6.1
+
+# Machine learning
+scikit-learn==1.7.2
+pandas==2.3.3
+
+# Clustering / dimensionality reduction
+umap-learn==0.5.11
+leidenalg==0.11.0
+python-igraph==1.0.0
+hdbscan==0.8.42
+
+# Visualization
+plotly==6.6.0
+matplotlib==3.10.8
+
+# JAX neural network library (VideoPrism dependency)
+flax==0.10.7
+
+# Note: the following are installed by install.sh with special flags:
+#   torch==2.6.0, torchvision==0.21.0  — requires --index-url for CUDA wheel
+#   jax[cuda12]==0.6.2                  — GPU install handled by install.sh
+#   videoprism          — installed from GitHub
+#   sam2_backend        — installed as local editable package

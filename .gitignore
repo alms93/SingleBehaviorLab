@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# SAM2 source is bundled; exclude only compiled artifacts
+sam2_backend/__pycache__/
+sam2_backend/**/__pycache__/
+sam2_backend/*.egg-info/
+
+# SAM2 checkpoints — large binary files, auto-downloaded by the app on first use.
+sam2_backend/checkpoints/*.pt
+sam2_backend/sam2/checkpoints/*.pt
+sam2_checkpoints/checkpoints/*.pt
+
+# VideoPrism backbone (auto-downloaded on first use)
+models/videoprism_backbone/
+
+# User experiment data (created at runtime)
+experiments/*/data/
+experiments/*/models/behavior_heads/*.pt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
