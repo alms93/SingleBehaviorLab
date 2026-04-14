@@ -5,9 +5,9 @@
 **SBL demo videos:**
 
 <p>
-  <a href="https://www.youtube.com/watch?v=Ov9rxxtYbXk"><img src="https://img.youtube.com/vi/Ov9rxxtYbXk/hqdefault.jpg" height="260" alt="SBL walkthrough demo"></a>
+  <a href="https://www.youtube.com/watch?v=Ov9rxxtYbXk"><img src="https://img.youtube.com/vi/Ov9rxxtYbXk/hqdefault.jpg" height="340" alt="SBL walkthrough demo"></a>
   &nbsp;&nbsp;
-  <a href="https://www.youtube.com/shorts/GEKvee0-Vvc"><img src="https://i.ytimg.com/vi/GEKvee0-Vvc/oar1.jpg" height="260" alt="SBL Shorts demo"></a>
+  <a href="https://www.youtube.com/shorts/GEKvee0-Vvc"><img src="https://i.ytimg.com/vi/GEKvee0-Vvc/oar1.jpg" height="340" alt="SBL Shorts demo"></a>
 </p>
 
 ---
