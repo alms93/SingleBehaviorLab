@@ -38,6 +38,10 @@ dependencies = [
     # CUDA-specific index URLs. Install them first with install.sh.
 ]
 
+[project.urls]
+Repository = "https://github.com/alms93/SingleBehaviorLab"
+Issues = "https://github.com/alms93/SingleBehaviorLab/issues"
+
 [project.optional-dependencies]
 # GPU stack — install manually (see INSTALL.md) or via install.sh
 gpu = [
