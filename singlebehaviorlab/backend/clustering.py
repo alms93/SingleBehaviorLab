@@ -1,0 +1,205 @@
+"""Headless UMAP + Leiden/HDBSCAN clustering for the CLI.
+
+Produces a pickle file that the GUI Clustering tab loads via the existing
+"Load Analysis State" action. The state schema matches
+``clustering_widget._save_analysis_state``.
+"""
+
+from __future__ import annotations
+
+import os
+import pickle
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Optional
+
+import numpy as np
+import pandas as pd
+
+__all__ = ["ClusteringParams", "run_clustering"]
+
+
+@dataclass
+class ClusteringParams:
+    """Knobs for ``run_clustering``. Defaults mirror the GUI sliders."""
+
+    method: str = "leiden"
+    n_components: int = 2
+    n_neighbors: int = 15
+    min_dist: float = 0.1
+    normalization: str = "standard"  # standard | minmax | l2 | none
+    leiden_resolution: float = 1.0
+    leiden_k: int = 15
+    min_cluster_size: int = 10
+    min_samples: int = 5
+    hdbscan_epsilon: float = 0.0
+
+
+def _load_matrix_metadata(
+    matrix_path: str,
+    metadata_path: Optional[str],
+) -> tuple[pd.DataFrame, Optional[pd.DataFrame]]:
+    if matrix_path.endswith(".npz"):
+        npz = np.load(matrix_path, allow_pickle=True)
+        matrix = npz["matrix"]
+        feature_names = npz["feature_names"]
+        snippet_ids = npz["snippet_ids"] if "snippet_ids" in npz else npz.get("span_ids")
+        if snippet_ids is None:
+            snippet_ids = np.array([f"snippet{i + 1}" for i in range(matrix.shape[1])])
+        matrix_df = pd.DataFrame(matrix, index=feature_names, columns=snippet_ids)
+    elif matrix_path.endswith(".parquet"):
+        matrix_df = pd.read_parquet(matrix_path, engine="pyarrow")
+    else:
+        matrix_df = pd.read_csv(matrix_path, index_col=0)
+
+    metadata_df: Optional[pd.DataFrame] = None
+    if metadata_path:
+        if metadata_path.endswith(".npz"):
+            meta_npz = np.load(metadata_path, allow_pickle=True)
+            metadata_df = pd.DataFrame(meta_npz["metadata"], columns=meta_npz["columns"])
+        elif metadata_path.endswith(".parquet"):
+            metadata_df = pd.read_parquet(metadata_path, engine="pyarrow")
+        else:
+            metadata_df = pd.read_csv(metadata_path)
+    return matrix_df, metadata_df
+
+
+def _normalize(X: pd.DataFrame, method: str) -> pd.DataFrame:
+    X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    method = method.lower()
+    if method == "standard":
+        from sklearn.preprocessing import StandardScaler
+        arr = StandardScaler().fit_transform(X)
+    elif method == "minmax":
+        from sklearn.preprocessing import MinMaxScaler
+        arr = MinMaxScaler().fit_transform(X)
+    elif method == "l2":
+        from sklearn.preprocessing import Normalizer
+        arr = Normalizer(norm="l2").fit_transform(X)
+    elif method in ("none", "raw"):
+        arr = X.values
+    else:
+        raise ValueError(f"Unknown normalization method: {method}")
+    return pd.DataFrame(arr, index=X.index, columns=X.columns)
+
+
+def _run_umap(
+    data: pd.DataFrame,
+    n_components: int,
+    n_neighbors: int,
+    min_dist: float,
+) -> np.ndarray:
+    import umap
+    reducer = umap.UMAP(
+        n_neighbors=n_neighbors,
+        min_dist=min_dist,
+        n_components=n_components,
+        random_state=42,
+    )
+    return reducer.fit_transform(data.values)
+
+
+def _run_leiden(data: pd.DataFrame, leiden_k: int, resolution: float) -> np.ndarray:
+    from sklearn.neighbors import kneighbors_graph
+    import igraph as ig
+    import leidenalg as la
+
+    knn = kneighbors_graph(data.values, n_neighbors=leiden_k, mode="connectivity", include_self=False)
+    sources, targets = knn.nonzero()
+    edges = list(zip(sources.tolist(), targets.tolist()))
+    graph = ig.Graph(n=data.shape[0], edges=edges, directed=False)
+    partition = la.find_partition(
+        graph,
+        la.RBConfigurationVertexPartition,
+        resolution_parameter=resolution,
+    )
+    return np.array(partition.membership)
+
+
+def _run_hdbscan(data: pd.DataFrame, params: ClusteringParams) -> np.ndarray:
+    import hdbscan
+    clusterer = hdbscan.HDBSCAN(
+        min_cluster_size=params.min_cluster_size,
+        min_samples=params.min_samples,
+        cluster_selection_epsilon=params.hdbscan_epsilon,
+    )
+    return clusterer.fit_predict(data.values)
+
+
+def run_clustering(
+    matrix_path: str | os.PathLike[str],
+    output_path: str | os.PathLike[str],
+    *,
+    metadata_path: Optional[str | os.PathLike[str]] = None,
+    params: Optional[ClusteringParams] = None,
+    log_fn: Optional[Callable[[str], None]] = None,
+) -> str:
+    """Cluster a feature matrix and write a GUI-loadable analysis pickle.
+
+    Returns the written pickle path.
+    """
+    params = params or ClusteringParams()
+
+    matrix_path_str = str(Path(matrix_path).expanduser().resolve())
+    metadata_path_str: Optional[str] = None
+    if metadata_path:
+        metadata_path_str = str(Path(metadata_path).expanduser().resolve())
+
+    output_path_obj = Path(output_path).expanduser().resolve()
+    output_path_obj.parent.mkdir(parents=True, exist_ok=True)
+
+    def _log(msg: str) -> None:
+        if log_fn:
+            log_fn(msg)
+
+    _log(f"Loading matrix: {matrix_path_str}")
+    matrix_df, metadata_df = _load_matrix_metadata(matrix_path_str, metadata_path_str)
+    _log(f"Matrix shape: {matrix_df.shape[0]} features × {matrix_df.shape[1]} samples")
+
+    processed = _normalize(matrix_df.T, params.normalization)
+    _log(f"Processed shape: {processed.shape} (samples × features); normalization={params.normalization}")
+
+    _log(
+        f"Running UMAP (n_neighbors={params.n_neighbors}, "
+        f"min_dist={params.min_dist}, n_components={params.n_components})"
+    )
+    embedding = _run_umap(
+        processed,
+        n_components=params.n_components,
+        n_neighbors=params.n_neighbors,
+        min_dist=params.min_dist,
+    )
+
+    if params.method == "leiden":
+        _log(f"Running Leiden clustering (k={params.leiden_k}, resolution={params.leiden_resolution})")
+        clusters = _run_leiden(processed, params.leiden_k, params.leiden_resolution)
+    elif params.method == "hdbscan":
+        _log(
+            f"Running HDBSCAN (min_cluster_size={params.min_cluster_size}, "
+            f"min_samples={params.min_samples}, epsilon={params.hdbscan_epsilon})"
+        )
+        clusters = _run_hdbscan(processed, params)
+    else:
+        raise ValueError(f"Unknown clustering method: {params.method}")
+
+    unique_clusters = sorted(set(int(c) for c in clusters))
+    _log(f"Clusters found: {len(unique_clusters)} (labels: {unique_clusters})")
+
+    state = {
+        "matrix_data": matrix_df,
+        "metadata": metadata_df,
+        "processed_data": processed,
+        "embedding": embedding,
+        "clusters": clusters,
+        "selected_features": list(matrix_df.index),
+        "snippet_to_clip_map": {},
+        "metadata_file_path": metadata_path_str,
+        "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
+        "version": "1.0",
+    }
+
+    with open(output_path_obj, "wb") as f:
+        pickle.dump(state, f)
+    _log(f"Wrote analysis state: {output_path_obj}")
+    return str(output_path_obj)

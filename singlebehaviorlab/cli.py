@@ -265,6 +265,39 @@ def cmd_register(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_cluster(args: argparse.Namespace) -> int:
+    from singlebehaviorlab.backend.clustering import ClusteringParams, run_clustering
+
+    params = ClusteringParams(
+        method=args.method,
+        n_components=args.n_components,
+    )
+    if args.umap_neighbors is not None:
+        params.n_neighbors = args.umap_neighbors
+        params.leiden_k = args.umap_neighbors
+    if args.umap_min_dist is not None:
+        params.min_dist = args.umap_min_dist
+    if args.leiden_resolution is not None:
+        params.leiden_resolution = args.leiden_resolution
+    if args.hdbscan_min_cluster_size is not None:
+        params.min_cluster_size = args.hdbscan_min_cluster_size
+
+    def log_fn(msg: str) -> None:
+        logger.info(msg)
+
+    out = run_clustering(
+        args.matrix,
+        args.out,
+        metadata_path=args.metadata,
+        params=params,
+        log_fn=log_fn,
+    )
+    logger.info("Clustering complete.")
+    logger.info("Analysis state: %s", out)
+    logger.info("Load it via the Clustering tab → 'Load Analysis State'.")
+    return 0
+
+
 def _run_command(args: argparse.Namespace) -> int:
     command = args.command
     if command == "train":
@@ -276,7 +309,7 @@ def _run_command(args: argparse.Namespace) -> int:
     if command == "segment":
         return _not_yet_implemented("segment")
     if command == "cluster":
-        return _not_yet_implemented("cluster")
+        return cmd_cluster(args)
     logger.error("Unknown command: %s", command)
     return 1
 
