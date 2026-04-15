@@ -2,7 +2,7 @@
 
 This guide walks through the app using a concrete example: **mice walking and moving in an open cage** (one or more animals, one or more videos). The same steps apply to other behaviors and species once you adapt class names and video setup.
 
-For installation, GPU setup, and troubleshooting, see [README.md](README.md) and [INSTALL.md](INSTALL.md).
+For installation, GPU setup, and troubleshooting, see [README.md](README.md).
 
 ---
 
@@ -27,8 +27,8 @@ For installation, GPU setup, and troubleshooting, see [README.md](README.md) and
 
 ## Before You Start
 
-1. **Launch the app** (after `conda activate singlebehaviorlab`):
-   - `singlebehaviorlab`, or `bash run.sh`, or `python -m singlebehaviorlab`, or from the repo root `python main.py` (same as the module)
+1. **Launch the app** (from an environment with `singlebehaviorlab` installed):
+   - `singlebehaviorlab`, or equivalently `python -m singlebehaviorlab`.
 2. **Create or load an experiment** when prompted:
    - **Create New Experiment** — pick a folder and name; the app creates `config.yaml`, `data/`, `models/`, etc.
    - **Load Existing Experiment** — open a previous experiment's `config.yaml`.

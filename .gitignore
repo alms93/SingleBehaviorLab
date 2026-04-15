@@ -9,15 +9,12 @@ __pycache__/
 dist/
 build/
 
-# SAM2 source is bundled; exclude only compiled artifacts
-sam2_backend/__pycache__/
-sam2_backend/**/__pycache__/
-sam2_backend/*.egg-info/
+# Vendored upstream packages: exclude compiled artifacts only
+third_party/**/__pycache__/
+third_party/**/*.egg-info/
 
 # SAM2 checkpoints — large binary files, auto-downloaded by the app on first use.
-sam2_backend/checkpoints/*.pt
-sam2_backend/sam2/checkpoints/*.pt
-sam2_checkpoints/checkpoints/*.pt
+third_party/sam2_backend/sam2/checkpoints/*.pt
 
 # VideoPrism backbone (auto-downloaded on first use)
 models/videoprism_backbone/

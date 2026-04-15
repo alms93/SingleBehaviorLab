@@ -50,7 +50,7 @@
 |---|---|
 | **Operating System** | Linux (Ubuntu 20.04 or later recommended) |
 | **GPU** | NVIDIA GPU with a CUDA 12-compatible driver **required**. 8 GB VRAM minimum; 12 GB+ comfortable for training. |
-| **Conda** | Miniconda or Anaconda — [download here](https://docs.conda.io/en/latest/miniconda.html) |
+| **Python** | 3.10 or later |
 | **Disk space** | ~10 GB free (SAM2 weights: ~3.5 GB, VideoPrism backbone: ~1 GB downloaded on first run, plus your experiment data) |
 | **Internet** | Required on first launch only (to auto-download the VideoPrism backbone). After that the app works offline. |
 
@@ -64,45 +64,38 @@ Look for `CUDA Version: XX.X` in the top-right corner.
 
 ## 2. Installation
 
+Install into a fresh virtual environment:
+
 ```bash
-cd SingleBehaviorLab
-bash install.sh
+python -m venv sbl_env
+source sbl_env/bin/activate
+pip install singlebehaviorlab
 ```
 
-The script creates the `singlebehaviorlab` conda environment (Python 3.10), installs PyTorch (CUDA 12.4 build), JAX/Flax (CUDA 12), VideoPrism, SAM2, and all other dependencies, and prints a verification summary. Installation takes 5–15 minutes and requires an NVIDIA GPU with a CUDA 12-compatible driver.
+This pulls in PyTorch (CUDA 12 build), JAX/Flax (CUDA 12), the vendored SAM2 fork, VideoPrism, and all other dependencies from PyPI in a single step. Installation takes 5–15 minutes and requires an NVIDIA GPU with a CUDA 12-compatible driver.
 
-For the manual `pip install` path, proxy setups, SAM2 checkpoint URLs, and step-by-step verification, see **[INSTALL.md](INSTALL.md)**.
+### Development install
+
+Contributors working from a source checkout can use an editable install instead:
+
+```bash
+git clone https://github.com/alms93/SingleBehaviorLab
+cd SingleBehaviorLab
+pip install -e .
+```
 
 ---
 
 ## 3. Launching the App
 
-After installation, you can start SingleBehaviorLab in any of these ways:
+Activate the environment and run:
 
-**Option A — command (simplest, works from anywhere):**
 ```bash
-conda activate singlebehaviorlab
+source sbl_env/bin/activate
 singlebehaviorlab
 ```
 
-**Option B — launch script (activates env automatically):**
-```bash
-bash run.sh
-```
-
-**Option C — Python module:**
-```bash
-conda activate singlebehaviorlab
-cd /path/to/SingleBehaviorLab
-python -m singlebehaviorlab
-```
-
-**Option D — `main.py` in a source checkout** (same as Option C; useful if you prefer `python main.py`):
-```bash
-conda activate singlebehaviorlab
-cd /path/to/SingleBehaviorLab
-python main.py
-```
+Equivalent module form: `python -m singlebehaviorlab`.
 
 ---
 
@@ -269,9 +262,9 @@ Your raw video(s)
 
 ## 8. SAM2 Models
 
-SingleBehaviorLab ships a locally modified build of [SAM2](https://github.com/facebookresearch/sam2) in `sam2_backend/`. The modifications adjust the video predictor's memory handling so that long recordings (thousands of frames) can be segmented without exhausting GPU memory; the model weights and architecture are unchanged. All credit for the underlying model and checkpoints goes to the original SAM2 authors at Meta AI — see the upstream repository for the model cards and license.
+SingleBehaviorLab ships a locally modified build of [SAM2](https://github.com/facebookresearch/sam2) vendored inside the package. The modifications adjust the video predictor's memory handling so that long recordings (thousands of frames) can be segmented without exhausting GPU memory; the model weights and architecture are unchanged. All credit for the underlying model and checkpoints goes to the original SAM2 authors at Meta AI — see the upstream repository for the model cards and license.
 
-SAM2 checkpoints are **bundled** — no download required.
+SAM2 checkpoints download automatically on first use.
 
 | Model | Size | Speed | Quality | Recommended for |
 |---|---|---|---|---|
@@ -322,19 +315,16 @@ SingleBehaviorLab runs two GPU frameworks simultaneously:
 
 ## 12. Directory Structure
 
+After `pip install`, the application code lives in your Python environment and experiments are created in a folder of your choice. The source repository layout (useful for contributors):
+
 ```
 SingleBehaviorLab/
-├── main.py                          # Compatibility launcher → singlebehaviorlab.__main__
-├── run.sh                           # One-click launch script
-├── install.sh                       # Automated installer
-├── environment.yml                  # Conda environment definition
-├── requirements.txt                 # Python package list
+├── pyproject.toml                   # Package metadata and dependencies
+├── README.md
+├── HOWTOUSE.md
 │
-├── config/
-│   └── config.yaml                  # Optional local default config
-│
-├── singlebehaviorlab/               # Installable package (all app code)
-│   ├── __main__.py                  # Used by python -m singlebehaviorlab
+├── singlebehaviorlab/               # Main package (all app code)
+│   ├── __main__.py                  # Entry point for `singlebehaviorlab`
 │   ├── backend/                     # Core ML and data processing
 │   │   ├── model.py                 # VideoPrism + BehaviorClassifier head
 │   │   ├── train.py                 # Training loop
@@ -354,40 +344,37 @@ SingleBehaviorLab/
 │   │   ├── registration_widget.py
 │   │   ├── clustering_widget.py
 │   │   └── ...                      # Supporting widgets and helpers
-│   └── data/
-│       ├── config/config.yaml       # Bundled default config template
-│       └── training_profiles.json   # Bundled preset profiles
+│   ├── data/                        # Bundled config template and presets
+│   └── licenses/                    # Third-party license notices (SAM2, VideoPrism)
 │
-├── sam2_backend/                    # Locally modified SAM2 source
-│   │                                # (memory-optimized for long videos;
-│   │                                # original: https://github.com/facebookresearch/sam2)
-│   └── checkpoints/                 # Bundled SAM2.1 weights
+├── third_party/                     # Vendored upstream code
+│   ├── sam2_backend/                # Memory-optimized SAM2 fork
+│   │   └── sam2/                    # Shipped as the `sam2` package
+│   │                                # (upstream: facebookresearch/sam2)
+│   └── videoprism_backend/
+│       └── videoprism/              # Shipped as the `videoprism` package
+│                                    # (upstream: google-deepmind/videoprism)
 │
-├── sam2_checkpoints/                # Additional SAM2 model weights
-│   └── checkpoints/
-│       ├── sam2.1_hiera_tiny.pt
-│       ├── sam2.1_hiera_small.pt
-│       ├── sam2.1_hiera_base_plus.pt
-│       └── sam2.1_hiera_large.pt
-│
-└── experiments/                     # Your experiment data lives here
-    └── my_experiment/
-        ├── config.yaml
-        ├── data/
-        │   ├── raw_videos/
-        │   ├── clips/
-        │   └── annotations/
-        └── models/
-            └── behavior_heads/
+└── tests/
+```
+
+A typical experiment directory (created and managed by the app):
+```
+my_experiment/
+├── config.yaml
+├── data/
+│   ├── raw_videos/                  # Your input videos
+│   ├── clips/                       # Auto-extracted short clips
+│   └── annotations/
+└── models/
+    └── behavior_heads/              # Trained classifier checkpoints
 ```
 
 ---
 
 ## 13. Troubleshooting
 
-**Runtime issues:**
-
 - **Out of memory during training.** Reduce **Batch Size** in the Training tab (try 8 or 4), or reduce **Clip Length**.
-- **App window doesn't open (no display).** SingleBehaviorLab requires a graphical desktop and cannot run headless. For remote servers, use X11 forwarding: `ssh -X user@host` then `bash run.sh`.
-
-**Install-time issues** (conda, PyTorch/JAX/CuDNN mismatches, SAM2 re-install, VideoPrism proxy, manual verification): see **[INSTALL.md — Troubleshooting](INSTALL.md#troubleshooting)**.
+- **App window doesn't open (no display).** SingleBehaviorLab requires a graphical desktop and cannot run headless. For remote servers, use X11 forwarding: `ssh -X user@host` then `singlebehaviorlab`.
+- **`nvidia-smi` shows a CUDA 11 driver.** The application requires a CUDA 12-compatible driver. Update the NVIDIA driver before installing.
+- **PyPI resolution conflict between `torch` and `jax`.** The wheel pins `torch>=2.8` so its bundled cuDNN matches JAX's ABI. If an older `torch` is already installed in the environment, upgrade it: `pip install -U "torch>=2.8"`.
