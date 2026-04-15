@@ -54,7 +54,7 @@ Issues = "https://github.com/alms93/SingleBehaviorLab/issues"
 test = ["pytest", "pytest-cov"]
 
 [project.scripts]
-singlebehaviorlab = "singlebehaviorlab.__main__:main"
+singlebehaviorlab = "singlebehaviorlab.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

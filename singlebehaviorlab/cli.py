@@ -1,0 +1,199 @@
+"""Command-line interface for SingleBehaviorLab.
+
+Running ``singlebehaviorlab`` with no subcommand launches the graphical
+interface. Running it with a subcommand (``train``, ``infer``, ``register``,
+``segment``, ``cluster``) runs that pipeline step headlessly from the terminal,
+suitable for servers and batch jobs.
+"""
+
+import argparse
+import logging
+import signal
+import sys
+
+__all__ = ["main"]
+
+logger = logging.getLogger("singlebehaviorlab")
+
+
+def _add_common_runtime_flags(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--log-level",
+        choices=("DEBUG", "INFO", "WARNING", "ERROR"),
+        default="INFO",
+        help="Log verbosity (default: INFO).",
+    )
+    parser.add_argument(
+        "--log-file",
+        metavar="PATH",
+        help="Also write log output to this file.",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="Disable tqdm progress bars (useful for non-TTY server logs).",
+    )
+
+
+def _configure_logging(args: argparse.Namespace) -> None:
+    level = getattr(logging, getattr(args, "log_level", "INFO"))
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+    log_file = getattr(args, "log_file", None)
+    if log_file:
+        handlers.append(logging.FileHandler(log_file))
+    logging.basicConfig(
+        level=level,
+        format="%(levelname)s [%(name)s] %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="singlebehaviorlab",
+        description="SingleBehaviorLab — behavior sequencing and unsupervised discovery.",
+    )
+    subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
+
+    gui_parser = subparsers.add_parser(
+        "gui",
+        help="Launch the graphical interface (default when no command is given).",
+    )
+    _add_common_runtime_flags(gui_parser)
+
+    train_parser = subparsers.add_parser(
+        "train",
+        help="Train a behavior classifier from an experiment directory.",
+    )
+    train_parser.add_argument("--experiment", required=True, metavar="DIR",
+                              help="Path to an experiment directory.")
+    train_parser.add_argument("--config", metavar="PATH",
+                              help="Override the experiment's config.yaml.")
+    train_parser.add_argument("--profile", metavar="NAME",
+                              help="Training profile name (e.g. balanced, quick, precise).")
+    train_parser.add_argument("--resume", metavar="CHECKPOINT",
+                              help="Resume from an existing .pt checkpoint.")
+    train_parser.add_argument("--epochs", type=int, metavar="N")
+    train_parser.add_argument("--batch-size", type=int, metavar="N")
+    train_parser.add_argument("--lr", type=float, metavar="X")
+    train_parser.add_argument("--output-name", metavar="NAME",
+                              help="Name for the trained model file (without extension).")
+    _add_common_runtime_flags(train_parser)
+
+    infer_parser = subparsers.add_parser(
+        "infer",
+        help="Run a trained classifier on a video and write an ethogram JSON.",
+    )
+    infer_parser.add_argument("--experiment", required=True, metavar="DIR")
+    infer_parser.add_argument("--model", required=True, metavar="PATH")
+    infer_parser.add_argument("--video", required=True, metavar="PATH")
+    infer_parser.add_argument("--out", required=True, metavar="PATH")
+    infer_parser.add_argument("--target-fps", type=float, metavar="N")
+    infer_parser.add_argument("--clip-length", type=int, metavar="N")
+    infer_parser.add_argument("--batch-size", type=int, metavar="N")
+    infer_parser.add_argument("--save-arrays", action="store_true",
+                              help="Also write the .arrays.npz sidecar.")
+    _add_common_runtime_flags(infer_parser)
+
+    register_parser = subparsers.add_parser(
+        "register",
+        help="Extract VideoPrism embeddings from a video and a mask file.",
+    )
+    register_parser.add_argument("--experiment", required=True, metavar="DIR")
+    register_parser.add_argument("--video", required=True, metavar="PATH")
+    register_parser.add_argument("--mask", required=True, metavar="PATH")
+    register_parser.add_argument("--out", required=True, metavar="PATH",
+                                 help="Output matrix .npz (metadata goes to a sibling file).")
+    register_parser.add_argument("--backbone", metavar="NAME",
+                                 default="videoprism_public_v1_base")
+    register_parser.add_argument("--clip-length", type=int, metavar="N")
+    register_parser.add_argument("--target-fps", type=float, metavar="N")
+    register_parser.add_argument("--clahe", dest="clahe", action="store_true", default=None)
+    register_parser.add_argument("--no-clahe", dest="clahe", action="store_false", default=None)
+    _add_common_runtime_flags(register_parser)
+
+    segment_parser = subparsers.add_parser(
+        "segment",
+        help="Run SAM2 tracking on a video using a saved prompts JSON file.",
+    )
+    segment_parser.add_argument("--video", required=True, metavar="PATH")
+    segment_parser.add_argument("--prompts", required=True, metavar="PATH",
+                                help="Point/box prompts JSON exported from the GUI.")
+    segment_parser.add_argument("--out", required=True, metavar="PATH",
+                                help="Output mask HDF5 file.")
+    segment_parser.add_argument("--model", metavar="FILE",
+                                default="sam2.1_hiera_large.pt",
+                                help="SAM2 checkpoint filename (default: sam2.1_hiera_large.pt).")
+    segment_parser.add_argument("--start-frame", type=int, metavar="N")
+    segment_parser.add_argument("--end-frame", type=int, metavar="N")
+    _add_common_runtime_flags(segment_parser)
+
+    cluster_parser = subparsers.add_parser(
+        "cluster",
+        help="Cluster VideoPrism embeddings and write a GUI-loadable analysis file.",
+    )
+    cluster_parser.add_argument("--matrix", required=True, metavar="PATH",
+                                help="Feature matrix produced by `register`.")
+    cluster_parser.add_argument("--metadata", metavar="PATH",
+                                help="Optional metadata file companion to --matrix.")
+    cluster_parser.add_argument("--out", required=True, metavar="PATH",
+                                help="Output .pkl loadable via 'Load Analysis State' in the GUI.")
+    cluster_parser.add_argument("--method", choices=("leiden", "hdbscan"), default="leiden")
+    cluster_parser.add_argument("--n-components", type=int, default=2, choices=(2, 3))
+    cluster_parser.add_argument("--umap-neighbors", type=int, metavar="N")
+    cluster_parser.add_argument("--umap-min-dist", type=float, metavar="X")
+    cluster_parser.add_argument("--leiden-resolution", type=float, metavar="X")
+    cluster_parser.add_argument("--hdbscan-min-cluster-size", type=int, metavar="N")
+    _add_common_runtime_flags(cluster_parser)
+
+    return parser
+
+
+def _not_yet_implemented(command: str) -> int:
+    logger.error("The `%s` subcommand will land in a later 2.1.0 step.", command)
+    return 2
+
+
+def _run_command(args: argparse.Namespace) -> int:
+    command = args.command
+    if command == "train":
+        return _not_yet_implemented("train")
+    if command == "infer":
+        return _not_yet_implemented("infer")
+    if command == "register":
+        return _not_yet_implemented("register")
+    if command == "segment":
+        return _not_yet_implemented("segment")
+    if command == "cluster":
+        return _not_yet_implemented("cluster")
+    logger.error("Unknown command: %s", command)
+    return 1
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
+
+    if args.command in (None, "gui"):
+        from singlebehaviorlab.__main__ import run_gui_app
+        run_gui_app()
+        return
+
+    _configure_logging(args)
+    signal.signal(signal.SIGINT, lambda *_: sys.exit(130))
+
+    try:
+        exit_code = _run_command(args)
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except SystemExit:
+        raise
+    except Exception:
+        logger.exception("Command failed with an unhandled exception")
+        sys.exit(2)
+    sys.exit(exit_code)
+
+
+if __name__ == "__main__":
+    main()
