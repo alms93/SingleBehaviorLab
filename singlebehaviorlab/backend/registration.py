@@ -192,6 +192,7 @@ def run_registration(
                 "clip_index": int(clip_match.group(1)) if clip_match else i - 1,
                 "start_frame": start_frame if start_frame is not None else "",
                 "end_frame": end_frame if end_frame is not None else "",
+                "clip_path": os.path.abspath(clip_path),
             }
         )
 

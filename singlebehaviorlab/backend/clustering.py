@@ -186,6 +186,21 @@ def run_clustering(
     unique_clusters = sorted(set(int(c) for c in clusters))
     _log(f"Clusters found: {len(unique_clusters)} (labels: {unique_clusters})")
 
+    snippet_to_clip_map: dict[str, str] = {}
+    if metadata_df is not None and "clip_path" in metadata_df.columns:
+        snippet_col = (
+            "snippet"
+            if "snippet" in metadata_df.columns
+            else ("span_id" if "span_id" in metadata_df.columns else None)
+        )
+        if snippet_col is not None:
+            for _, row in metadata_df.iterrows():
+                snippet_id = str(row.get(snippet_col, "")).strip()
+                clip_path_val = str(row.get("clip_path", "")).strip()
+                if snippet_id and clip_path_val and os.path.exists(clip_path_val):
+                    snippet_to_clip_map[snippet_id] = clip_path_val
+        _log(f"Built snippet→clip map with {len(snippet_to_clip_map)} entries from metadata.")
+
     state = {
         "matrix_data": matrix_df,
         "metadata": metadata_df,
@@ -193,7 +208,7 @@ def run_clustering(
         "embedding": embedding,
         "clusters": clusters,
         "selected_features": list(matrix_df.index),
-        "snippet_to_clip_map": {},
+        "snippet_to_clip_map": snippet_to_clip_map,
         "metadata_file_path": metadata_path_str,
         "timestamp": datetime.now().strftime("%Y%m%d_%H%M%S"),
         "version": "1.0",
