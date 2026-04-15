@@ -2684,6 +2684,7 @@ def train_model(
             "classes": class_names,
             "num_classes": len(class_names),
             "clip_length": clip_length_value,
+            "target_fps": int(config.get("target_fps", 16)),
             "resolution": resolution_value,
             "training_samples": class_counts_named,
             "backbone_model": config.get("backbone_model", "videoprism_public_v1_base"),

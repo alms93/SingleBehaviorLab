@@ -3112,6 +3112,7 @@ class TrainingWidget(QWidget):
             "head_kwargs": head_kwargs,
             "dropout": self.map_dropout_spin.value(),
             "clip_length": self.clip_length_spin.value(),
+            "target_fps": int(self.config.get("default_target_fps", 16)),
             "resolution": resolution_cfg,
             "use_all_for_training": self.use_all_for_training_check.isChecked(),
             "val_split": self.val_split_spin.value(),

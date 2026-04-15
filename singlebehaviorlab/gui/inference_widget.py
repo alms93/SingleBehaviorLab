@@ -185,16 +185,16 @@ class InferenceWidget(QWidget):
         
         self.step_frames_spin = QSpinBox()
         self.step_frames_spin.setRange(1, 64)
-        self.step_frames_spin.setValue(16)
+        self.step_frames_spin.setValue(max(1, self.clip_length_spin.value() // 2))
         self.step_frames_spin.setToolTip(
             "Number of subsampled frames to advance between clips.\n"
-            "Set smaller than clip length for overlapping clips.\n"
-            "E.g., step=4 with clip=16 gives 75% overlap."
+            "Defaults to half of 'Frames per clip' (50% overlap) but can be changed.\n"
+            "Smaller values mean more overlap and finer temporal resolution."
         )
         self.step_frames_spin.valueChanged.connect(self._on_step_or_clip_changed)
         params_layout.addRow("Step frames:", self.step_frames_spin)
-        
-        self.clip_length_spin.valueChanged.connect(self._on_step_or_clip_changed)
+
+        self.clip_length_spin.valueChanged.connect(self._on_clip_length_changed)
 
         self.resolution_spin = QSpinBox()
         self.resolution_spin.setRange(64, 1024)
@@ -815,6 +815,11 @@ class InferenceWidget(QWidget):
                     if clip_len:
                         self.clip_length_spin.setValue(int(clip_len))
                         self.log_text.append(f"Automatically set 'Frames per clip' to {clip_len} from model metadata.")
+
+                    meta_fps = meta_data.get("target_fps") or meta_data.get("training_config", {}).get("target_fps")
+                    if meta_fps:
+                        self.target_fps_spin.setValue(int(meta_fps))
+                        self.log_text.append(f"Automatically set 'Target FPS' to {meta_fps} from model metadata.")
                     
                     resolution = meta_data.get("resolution") or meta_data.get("training_config", {}).get("resolution")
                     if resolution:
@@ -1640,7 +1645,7 @@ class InferenceWidget(QWidget):
             # Update UI with loaded parameters
             self.target_fps_spin.setValue(parameters.get("target_fps", 16))
             self.clip_length_spin.setValue(parameters.get("clip_length", 16))
-            self.step_frames_spin.setValue(parameters.get("step_frames", 16))
+            self.step_frames_spin.setValue(max(1, self.clip_length_spin.value() // 2))
             self.sample_inference_check.setChecked(bool(parameters.get("sample_inference_enabled", False)))
             self.sample_duration_spin.setValue(int(parameters.get("sample_duration_seconds", 60)))
             self.sample_count_spin.setValue(int(parameters.get("sample_num_chunks", 5)))
@@ -3303,16 +3308,17 @@ class InferenceWidget(QWidget):
             return self.attr_predictions[clip_idx]
         return None
 
+    def _on_clip_length_changed(self, value: int):
+        clip_length = int(value)
+        self.step_frames_spin.blockSignals(True)
+        self.step_frames_spin.setValue(max(1, clip_length // 2))
+        self.step_frames_spin.blockSignals(False)
+        self._on_step_or_clip_changed(self.step_frames_spin.value())
+
     def _on_step_or_clip_changed(self, value: int):
-        """Handle step_frames or clip_length value change.
-        
-        Auto-enables frame aggregation when step != clip (overlapping clips).
-        """
         step_frames = self.step_frames_spin.value()
         clip_length = self.clip_length_spin.value()
-        
         if step_frames != clip_length:
-            # Overlapping or gapped clips - enable frame aggregation for precise boundaries
             if not self.frame_aggregation_check.isChecked():
                 self.frame_aggregation_check.setChecked(True)
                 self.log_text.append(
