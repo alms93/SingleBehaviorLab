@@ -97,6 +97,39 @@ singlebehaviorlab
 
 Equivalent module form: `python -m singlebehaviorlab`.
 
+### Headless / server use (CLI)
+
+The same `singlebehaviorlab` command also runs as a headless CLI when a subcommand is supplied. Use it to run the GPU-heavy pipeline steps on a remote machine without opening the GUI:
+
+```bash
+# Train a classifier from an experiment directory
+singlebehaviorlab train --experiment /path/to/my_experiment --profile balanced
+
+# Run a trained model on a long video
+singlebehaviorlab infer --experiment /path/to/my_experiment \
+    --model /path/to/my_experiment/models/behavior_heads/model.pt \
+    --video /data/recording.mp4 \
+    --out /data/recording_inference.json
+
+# Extract VideoPrism embeddings from a video + mask
+singlebehaviorlab register --experiment /path/to/my_experiment \
+    --video /data/recording.mp4 \
+    --mask /data/recording_masks.h5 \
+    --out /data/recording_matrix.npz
+
+# Cluster an embedding matrix (loadable via the GUI's "Load Analysis State")
+singlebehaviorlab cluster --matrix /data/recording_matrix.npz \
+    --metadata /data/recording_matrix_metadata.npz \
+    --out /data/recording_clusters.pkl
+
+# Run SAM2 tracking from a prompts JSON exported in the Segmentation tab
+singlebehaviorlab segment --video /data/recording.mp4 \
+    --prompts /data/prompts.json \
+    --out /data/recording_masks.h5
+```
+
+Run `singlebehaviorlab <command> --help` for the full flag list on each subcommand. The GUI-only steps (labeling, refinement review, cluster inspection) still require the graphical interface; the CLI covers the batch-processing steps where no human input is needed.
+
 ---
 
 ## 4. First Launch
