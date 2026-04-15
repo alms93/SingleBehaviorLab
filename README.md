@@ -2,12 +2,17 @@
 
 **SingleBehaviorLab (SBL)** is a tool for behavior action localization in animal video. It supports lightweight few-shot training of behavior classifiers, referred to here as *behavior sequencing*, along with unsupervised behavior discovery for exploring unlabeled recordings, and a full GUI pipeline for downstream analysis: ethograms, behavior clustering, transition state analysis, and more comprehesive tools focused on postprocessing.
 
-<p align="center">
-  <img src="docs/behavior_seq.png" alt="Behavior Sequencing GUI" width="420">
-  &nbsp;&nbsp;
-  <img src="docs/behavior_clustering.png" alt="Unsupervised Discovery GUI" width="420">
-</p>
-<p align="center"><em>Figure 1 — The two main modules of SBL: Behavior Sequencing GUI (left) and Unsupervised Discovery (right).</em></p>
+<table align="center">
+  <tr>
+    <td><img src="docs/behavior_seq.png" alt="Behavior Sequencing GUI" width="420"></td>
+    <td><img src="docs/behavior_clustering.png" alt="Unsupervised Discovery GUI" width="420"></td>
+  </tr>
+  <tr>
+    <td align="center"><em>Behavior Sequencing GUI</em></td>
+    <td align="center"><em>Unsupervised Discovery</em></td>
+  </tr>
+</table>
+<p align="center"><em>Figure 1 — The two main modules of SBL.</em></p>
 
 **SBL demo videos:**
 
