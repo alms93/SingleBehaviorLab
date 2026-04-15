@@ -191,6 +191,7 @@ Both NPZ files can be loaded directly in the Clustering tab via **Load matrix/me
 | `--out PATH` | Output matrix `.npz`. |
 | `--backbone NAME` | VideoPrism backbone name (default: `videoprism_public_v1_base`). |
 | `--clip-length N` | Frames per extracted clip (default: 16). |
+| `--step-frames N` | Stride between consecutive clips (default: `clip-length / 2`, giving 50% overlap). |
 | `--target-fps N` | Subsampling FPS (default: 12). |
 | `--clahe` / `--no-clahe` | Toggle CLAHE contrast normalization on the extracted clips (default: on). |
 

@@ -163,6 +163,10 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Number of frames per extracted clip (default: 16).",
     )
     register_parser.add_argument(
+        "--step-frames", type=int, metavar="N",
+        help="Stride between consecutive clips in frames (default: clip-length / 2).",
+    )
+    register_parser.add_argument(
         "--target-fps", type=float, metavar="N",
         help="Subsampling FPS for clip extraction (default: 12).",
     )
@@ -337,7 +341,8 @@ def cmd_register(args: argparse.Namespace) -> int:
     )
     if args.clip_length is not None:
         params.clip_length_frames = args.clip_length
-        params.step_frames = args.clip_length
+    if args.step_frames is not None:
+        params.step_frames = args.step_frames
     if args.target_fps is not None:
         params.target_fps = int(args.target_fps)
     if args.clahe is False:

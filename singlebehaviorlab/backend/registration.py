@@ -38,9 +38,15 @@ class RegistrationParams:
     anchor_mode: str = "first"
     target_fps: int = 12
     clip_length_frames: int = 16
-    step_frames: int = 16
+    step_frames: Optional[int] = None
     backbone_model: str = "videoprism_public_v1_base"
     experiment_name: Optional[str] = None
+
+    @property
+    def effective_step_frames(self) -> int:
+        if self.step_frames is None:
+            return max(1, self.clip_length_frames // 2)
+        return max(1, int(self.step_frames))
 
     def with_overrides(self, **kwargs: Any) -> "RegistrationParams":
         replacements = {k: v for k, v in kwargs.items() if v is not None}
@@ -125,6 +131,10 @@ def run_registration(
     _log(f"Video: {video_path}")
     _log(f"Mask:  {mask_path}")
     _log(f"Clips cache: {clips_cache_dir}")
+    _log(
+        f"Clip length {params.clip_length_frames}, step {params.effective_step_frames}, "
+        f"target fps {params.target_fps}"
+    )
 
     clip_results = process_video_to_clips(
         video_path=video_path,
@@ -138,7 +148,7 @@ def run_registration(
         anchor_mode=params.anchor_mode,
         target_fps=params.target_fps,
         clip_length_frames=params.clip_length_frames,
-        step_frames=params.step_frames,
+        step_frames=params.effective_step_frames,
     )
     if not clip_results:
         raise RuntimeError("No clips produced from the input video and mask.")
