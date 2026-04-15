@@ -66,88 +66,198 @@ def _build_parser() -> argparse.ArgumentParser:
         "train",
         help="Train a behavior classifier from an experiment directory.",
     )
-    train_parser.add_argument("--experiment", required=True, metavar="DIR",
-                              help="Path to an experiment directory.")
-    train_parser.add_argument("--config", metavar="PATH",
-                              help="Override the experiment's config.yaml.")
-    train_parser.add_argument("--profile", metavar="NAME",
-                              help="Training profile name (e.g. balanced, quick, precise).")
-    train_parser.add_argument("--resume", metavar="CHECKPOINT",
-                              help="Resume from an existing .pt checkpoint.")
-    train_parser.add_argument("--epochs", type=int, metavar="N")
-    train_parser.add_argument("--batch-size", type=int, metavar="N")
-    train_parser.add_argument("--lr", type=float, metavar="X")
-    train_parser.add_argument("--output-name", metavar="NAME",
-                              help="Name for the trained model file (without extension).")
+    train_parser.add_argument(
+        "--experiment", required=True, metavar="DIR",
+        help="Experiment directory containing data/, models/, and config.yaml.",
+    )
+    train_parser.add_argument(
+        "--config", metavar="PATH",
+        help="Alternate config.yaml to override the one in the experiment directory.",
+    )
+    train_parser.add_argument(
+        "--profile", metavar="NAME",
+        help="Training profile name from data/training_profiles.json (e.g. balanced, quick, precise).",
+    )
+    train_parser.add_argument(
+        "--resume", metavar="CHECKPOINT",
+        help="Warm-start training from an existing .pt checkpoint (partial load if classes differ).",
+    )
+    train_parser.add_argument(
+        "--epochs", type=int, metavar="N",
+        help="Number of training epochs (overrides the profile/config value).",
+    )
+    train_parser.add_argument(
+        "--batch-size", type=int, metavar="N",
+        help="Mini-batch size (overrides the profile/config value).",
+    )
+    train_parser.add_argument(
+        "--lr", type=float, metavar="X",
+        help="Classification head learning rate (overrides the profile/config value).",
+    )
+    train_parser.add_argument(
+        "--output-name", metavar="NAME",
+        help="Basename (without extension) for the saved .pt checkpoint under models/behavior_heads/.",
+    )
     _add_common_runtime_flags(train_parser)
 
     infer_parser = subparsers.add_parser(
         "infer",
-        help="Run a trained classifier on a video and write an ethogram JSON.",
+        help="Run a trained classifier on a video and write a GUI-loadable results JSON.",
     )
-    infer_parser.add_argument("--experiment", required=True, metavar="DIR")
-    infer_parser.add_argument("--model", required=True, metavar="PATH")
-    infer_parser.add_argument("--video", required=True, metavar="PATH")
-    infer_parser.add_argument("--out", required=True, metavar="PATH")
-    infer_parser.add_argument("--target-fps", type=float, metavar="N")
-    infer_parser.add_argument("--clip-length", type=int, metavar="N")
-    infer_parser.add_argument("--batch-size", type=int, metavar="N")
-    infer_parser.add_argument("--save-arrays", action="store_true",
-                              help="Also write the .arrays.npz sidecar.")
+    infer_parser.add_argument(
+        "--experiment", required=True, metavar="DIR",
+        help="Experiment directory (used to locate classes via annotations.json if the model lacks metadata).",
+    )
+    infer_parser.add_argument(
+        "--model", required=True, metavar="PATH",
+        help="Trained classifier .pt checkpoint (with sibling .meta.json when available).",
+    )
+    infer_parser.add_argument(
+        "--video", required=True, metavar="PATH",
+        help="Input video file to run inference on.",
+    )
+    infer_parser.add_argument(
+        "--out", required=True, metavar="PATH",
+        help="Output JSON path. Loadable via the Inference tab's 'Load results' action.",
+    )
+    infer_parser.add_argument(
+        "--target-fps", type=float, metavar="N",
+        help="Target FPS for clip extraction (default: value stored in the model's metadata).",
+    )
+    infer_parser.add_argument(
+        "--clip-length", type=int, metavar="N",
+        help="Frames per clip (default: value stored in the model's metadata).",
+    )
+    infer_parser.add_argument(
+        "--batch-size", type=int, metavar="N",
+        help="Inference mini-batch size (default: auto-scaled to free GPU memory).",
+    )
+    infer_parser.add_argument(
+        "--save-arrays", action="store_true",
+        help="Also write a .arrays.npz sidecar with the raw per-frame probability arrays.",
+    )
     _add_common_runtime_flags(infer_parser)
 
     register_parser = subparsers.add_parser(
         "register",
-        help="Extract VideoPrism embeddings from a video and a mask file.",
+        help="Extract VideoPrism embeddings from a video + mask pair.",
     )
-    register_parser.add_argument("--video", required=True, metavar="PATH")
-    register_parser.add_argument("--mask", required=True, metavar="PATH")
-    register_parser.add_argument("--out", required=True, metavar="PATH",
-                                 help="Output matrix .npz (metadata goes to a sibling file).")
-    register_parser.add_argument("--backbone", metavar="NAME",
-                                 default="videoprism_public_v1_base")
-    register_parser.add_argument("--clip-length", type=int, metavar="N")
-    register_parser.add_argument("--target-fps", type=float, metavar="N")
-    register_parser.add_argument("--clahe", dest="clahe", action="store_true", default=None)
-    register_parser.add_argument("--no-clahe", dest="clahe", action="store_false", default=None)
+    register_parser.add_argument(
+        "--video", required=True, metavar="PATH",
+        help="Input video file.",
+    )
+    register_parser.add_argument(
+        "--mask", required=True, metavar="PATH",
+        help="HDF5 mask file produced by `singlebehaviorlab segment` (or the GUI Segmentation tab).",
+    )
+    register_parser.add_argument(
+        "--out", required=True, metavar="PATH",
+        help="Output matrix .npz. A sibling _metadata.npz is written next to it.",
+    )
+    register_parser.add_argument(
+        "--backbone", metavar="NAME", default="videoprism_public_v1_base",
+        help="VideoPrism backbone identifier (default: videoprism_public_v1_base).",
+    )
+    register_parser.add_argument(
+        "--clip-length", type=int, metavar="N",
+        help="Number of frames per extracted clip (default: 16).",
+    )
+    register_parser.add_argument(
+        "--target-fps", type=float, metavar="N",
+        help="Subsampling FPS for clip extraction (default: 12).",
+    )
+    register_parser.add_argument(
+        "--clahe", dest="clahe", action="store_true", default=None,
+        help="Apply CLAHE contrast normalization to extracted clips (default: on).",
+    )
+    register_parser.add_argument(
+        "--no-clahe", dest="clahe", action="store_false", default=None,
+        help="Disable CLAHE contrast normalization.",
+    )
     _add_common_runtime_flags(register_parser)
 
     segment_parser = subparsers.add_parser(
         "segment",
         help="Run SAM2 tracking on a video using a saved prompts JSON file.",
     )
-    segment_parser.add_argument("--video", required=True, metavar="PATH")
-    segment_parser.add_argument("--prompts", required=True, metavar="PATH",
-                                help="Point/box prompts JSON exported from the GUI.")
-    segment_parser.add_argument("--out", required=True, metavar="PATH",
-                                help="Output mask HDF5 file.")
-    segment_parser.add_argument("--model", metavar="FILE",
-                                default="sam2.1_hiera_large.pt",
-                                help="SAM2 checkpoint filename (default: sam2.1_hiera_large.pt).")
-    segment_parser.add_argument("--start-frame", type=int, metavar="N")
-    segment_parser.add_argument("--end-frame", type=int, metavar="N")
+    segment_parser.add_argument(
+        "--video", required=True, metavar="PATH",
+        help="Input video file to segment.",
+    )
+    segment_parser.add_argument(
+        "--prompts", required=True, metavar="PATH",
+        help="Point/box prompts JSON exported from the GUI Segmentation tab.",
+    )
+    segment_parser.add_argument(
+        "--out", required=True, metavar="PATH",
+        help="Output HDF5 mask file. Loadable in the GUI's Registration tab.",
+    )
+    segment_parser.add_argument(
+        "--model", metavar="FILE", default="sam2.1_hiera_large.pt",
+        help=(
+            "SAM2 checkpoint filename under sam2_checkpoints/. One of: "
+            "sam2.1_hiera_tiny.pt, sam2.1_hiera_small.pt, sam2.1_hiera_base_plus.pt, "
+            "sam2.1_hiera_large.pt (default: large)."
+        ),
+    )
+    segment_parser.add_argument(
+        "--start-frame", type=int, metavar="N",
+        help="First frame to track (default: 0).",
+    )
+    segment_parser.add_argument(
+        "--end-frame", type=int, metavar="N",
+        help="Last frame (exclusive) to track (default: end of video).",
+    )
     _add_common_runtime_flags(segment_parser)
 
     cluster_parser = subparsers.add_parser(
         "cluster",
-        help="Cluster VideoPrism embeddings and write a GUI-loadable analysis file.",
+        help="Run UMAP + Leiden/HDBSCAN on an embedding matrix and write a GUI-loadable analysis file.",
     )
-    cluster_parser.add_argument("--matrix", required=True, metavar="PATH",
-                                help="Feature matrix produced by `register`.")
-    cluster_parser.add_argument("--metadata", metavar="PATH",
-                                help="Optional metadata file companion to --matrix.")
-    cluster_parser.add_argument("--out", required=True, metavar="PATH",
-                                help="Output .pkl loadable via 'Load Analysis State' in the GUI.")
-    cluster_parser.add_argument("--method", choices=("leiden", "hdbscan"), default="leiden")
-    cluster_parser.add_argument("--n-components", type=int, default=2, choices=(2, 3))
-    cluster_parser.add_argument("--umap-neighbors", type=int, metavar="N")
-    cluster_parser.add_argument("--umap-min-dist", type=float, metavar="X")
-    cluster_parser.add_argument("--leiden-resolution", type=float, metavar="X")
-    cluster_parser.add_argument("--hdbscan-min-cluster-size", type=int, metavar="N")
-    cluster_parser.add_argument("--plot-save", metavar="PATH",
-                                help="Render the UMAP scatter and save it (PDF/PNG/SVG).")
-    cluster_parser.add_argument("--plot-show", action="store_true",
-                                help="Open the UMAP scatter in an interactive window.")
+    cluster_parser.add_argument(
+        "--matrix", required=True, metavar="PATH",
+        help="Feature matrix .npz produced by `register`.",
+    )
+    cluster_parser.add_argument(
+        "--metadata", metavar="PATH",
+        help="Companion metadata .npz (enables the snippet→clip map for UMAP click-to-inspect).",
+    )
+    cluster_parser.add_argument(
+        "--out", required=True, metavar="PATH",
+        help="Output .pkl loadable via 'Load Analysis State' in the Clustering tab.",
+    )
+    cluster_parser.add_argument(
+        "--method", choices=("leiden", "hdbscan"), default="leiden",
+        help="Clustering algorithm to run on the UMAP embedding (default: leiden).",
+    )
+    cluster_parser.add_argument(
+        "--n-components", type=int, default=2, choices=(2, 3),
+        help="UMAP output dimensionality (default: 2).",
+    )
+    cluster_parser.add_argument(
+        "--umap-neighbors", type=int, metavar="N",
+        help="UMAP n_neighbors and Leiden k (default: 15).",
+    )
+    cluster_parser.add_argument(
+        "--umap-min-dist", type=float, metavar="X",
+        help="UMAP min_dist parameter (default: 0.1).",
+    )
+    cluster_parser.add_argument(
+        "--leiden-resolution", type=float, metavar="X",
+        help="Leiden resolution; lower values give fewer, larger clusters (default: 1.0).",
+    )
+    cluster_parser.add_argument(
+        "--hdbscan-min-cluster-size", type=int, metavar="N",
+        help="HDBSCAN min_cluster_size (default: 10).",
+    )
+    cluster_parser.add_argument(
+        "--plot-save", metavar="PATH",
+        help="Render the UMAP scatter and save it. Format inferred from extension (.pdf, .png, .svg).",
+    )
+    cluster_parser.add_argument(
+        "--plot-show", action="store_true",
+        help="Open the UMAP scatter in an interactive window (requires a display).",
+    )
     _add_common_runtime_flags(cluster_parser)
 
     return parser
