@@ -108,7 +108,8 @@ pip install --upgrade \
   numpy==2.2.6 h5py==3.14.0 opencv-python==4.13.0.92 Pillow==12.1.1 scipy==1.15.3 eva-decord==0.6.1 \
   scikit-learn==1.7.2 pandas==2.3.3 \
   umap-learn==0.5.11 leidenalg==0.11.0 python-igraph==1.0.0 hdbscan==0.8.42 \
-  plotly==6.6.0 matplotlib==3.10.8
+  plotly==6.6.0 matplotlib==3.10.8 \
+  tqdm>=4.66.1 hydra-core>=1.3.2 iopath>=0.1.10
 
 echo "  Installing VideoPrism from GitHub..."
 pip install --upgrade git+https://github.com/google-deepmind/videoprism.git
@@ -119,12 +120,14 @@ echo "[5/6] Done."
 echo "[6/7] Installing SAM2 (local)..."
 SAM2_DIR="$APP_DIR/sam2_backend"
 if [ -d "$SAM2_DIR" ]; then
-  pip install -e "$SAM2_DIR" --no-build-isolation
+  pip install -e "$SAM2_DIR" --no-build-isolation --no-deps
   echo "  SAM2 installed from $SAM2_DIR"
 else
   echo "  WARNING: sam2_backend/ not found — skipping SAM2 install."
   echo "  The Segmentation & Tracking tab will not be available."
 fi
+
+pip install --upgrade "nvidia-cudnn-cu12==9.20.0.48"
 echo "[6/7] Done."
 
 # Step 7 — install the SingleBehaviorLab package and register the entry point.
@@ -152,10 +155,10 @@ if not gpu_ok:
     print('  Re-run: pip install -U \"jax[cuda12]==0.6.2\"')
 "
 python -c "
+import sys
 from importlib import metadata
 try:
     v = metadata.version('nvidia-cudnn-cu12')
-    print(f'  CuDNN runtime  OK  ({v})')
     parts = []
     for token in v.split('.'):
         digits = ''.join(ch for ch in token if ch.isdigit())
@@ -163,7 +166,12 @@ try:
     while len(parts) < 2:
         parts.append(0)
     if tuple(parts[:2]) < (9, 8):
-        print('  CuDNN runtime is older than 9.8 and may break VideoPrism/JAX GPU loading.')
+        print(f'  CuDNN runtime  FAIL  ({v})')
+        print('  CuDNN is older than 9.8 — VideoPrism/JAX GPU training will fail with')
+        print('  \"FAILED_PRECONDITION: DNN library initialization failed\".')
+        print('  Fix: pip install --upgrade \"nvidia-cudnn-cu12==9.20.0.48\"')
+        sys.exit(1)
+    print(f'  CuDNN runtime  OK  ({v})')
 except metadata.PackageNotFoundError:
     print('  CuDNN runtime  OK  (managed outside pip)')
 "
