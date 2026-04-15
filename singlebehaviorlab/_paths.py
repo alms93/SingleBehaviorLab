@@ -44,20 +44,29 @@ def get_package_dir() -> Path:
 
 
 def get_sam2_backend_dir() -> Path:
-    """Locate the sam2_backend source directory."""
+    """Return the directory containing the sam2 Python package."""
+    try:
+        import sam2  # type: ignore
+        sam2_pkg = Path(sam2.__file__).resolve().parent
+        if (sam2_pkg / "configs").exists():
+            return sam2_pkg.parent
+    except Exception:
+        pass
     return _first_existing(
-        _PKG_PARENT / "sam2_backend",          # source / zip install
-        _PKG_DIR / "sam2_backend",              # bundled in package data
-        USER_DATA_DIR / "sam2_backend",         # user-managed
+        _PKG_PARENT / "sam2_backend",
+        _PKG_DIR / "sam2_backend",
+        USER_DATA_DIR / "sam2_backend",
     )
 
 
 def get_sam2_checkpoints_dir() -> Path:
-    """Locate the sam2_checkpoints directory."""
-    return _first_existing(
-        _PKG_PARENT / "sam2_checkpoints",       # source / zip install
-        USER_DATA_DIR / "sam2_checkpoints",     # user-managed
-    )
+    """Return the directory where SAM2 checkpoint files live, creating it if absent."""
+    source_dir = _PKG_PARENT / "sam2_checkpoints"
+    if source_dir.exists():
+        return source_dir
+    user_dir = USER_DATA_DIR / "sam2_checkpoints"
+    user_dir.mkdir(parents=True, exist_ok=True)
+    return user_dir
 
 
 def get_training_profiles_path() -> Path:

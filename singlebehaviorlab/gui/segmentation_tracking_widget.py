@@ -837,7 +837,7 @@ class SegmentationTrackingWidget(QWidget):
             return False
 
     def _has_installed_sam2_distribution(self):
-        """Return True only when SAM2 is installed as a Python package."""
+        """Return True when SAM2 is importable as a Python package."""
         for dist_name in ("SAM-2", "sam2"):
             try:
                 importlib_metadata.distribution(dist_name)
@@ -846,7 +846,11 @@ class SegmentationTrackingWidget(QWidget):
                 continue
             except Exception:
                 continue
-        return False
+        try:
+            import importlib.util
+            return importlib.util.find_spec("sam2") is not None
+        except Exception:
+            return False
     
     
     def _check_sam2_availability(self):
