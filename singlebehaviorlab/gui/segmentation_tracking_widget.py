@@ -1,6 +1,7 @@
 import sys
 import os
 import gc
+import json
 import logging
 import cv2
 import numpy as np
@@ -1089,7 +1090,22 @@ class SegmentationTrackingWidget(QWidget):
         self.btn_clear_points = QPushButton("Clear points")
         self.btn_clear_points.clicked.connect(self._clear_points)
         controls_layout.addWidget(self.btn_clear_points)
-        
+
+        self.btn_export_prompts = QPushButton("Export prompts")
+        self.btn_export_prompts.setToolTip(
+            "Save the current point prompts to a JSON file so the headless CLI "
+            "(`singlebehaviorlab segment`) can reproduce this segmentation on another machine."
+        )
+        self.btn_export_prompts.clicked.connect(self._export_prompts)
+        controls_layout.addWidget(self.btn_export_prompts)
+
+        self.btn_import_prompts = QPushButton("Import prompts")
+        self.btn_import_prompts.setToolTip(
+            "Load point prompts from a JSON file exported with 'Export prompts'."
+        )
+        self.btn_import_prompts.clicked.connect(self._import_prompts)
+        controls_layout.addWidget(self.btn_import_prompts)
+
         controls_layout.addSpacing(10)
         
         self.chk_auto_follow = QCheckBox("Auto-follow")
@@ -1824,6 +1840,58 @@ class SegmentationTrackingWidget(QWidget):
             except:
                 pass
         self._update_frame()
+
+    def _export_prompts(self):
+        """Export current point prompts to a JSON file usable by `singlebehaviorlab segment`."""
+        if not self.points:
+            QMessageBox.information(self, "No prompts", "Add at least one point prompt before exporting.")
+            return
+        default_dir = os.path.dirname(self.video_path) if self.video_path else ""
+        default_name = "sam2_prompts.json"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export SAM2 prompts", os.path.join(default_dir, default_name),
+            "JSON Files (*.json)",
+        )
+        if not path:
+            return
+        try:
+            from singlebehaviorlab.backend.segmentation import save_prompts_json
+            save_prompts_json(self.video_path or "", self.points, path)
+            QMessageBox.information(self, "Exported", f"Saved {len(self.points)} prompt point(s) to:\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Export failed", f"Failed to write prompts:\n{exc}")
+
+    def _import_prompts(self):
+        """Load point prompts from a JSON file produced by `Export prompts`."""
+        default_dir = os.path.dirname(self.video_path) if self.video_path else ""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import SAM2 prompts", default_dir, "JSON Files (*.json)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            entries = data.get("prompts", [])
+            if not isinstance(entries, list) or not entries:
+                QMessageBox.warning(self, "Empty file", "No prompts found in the selected file.")
+                return
+            imported: list[tuple[float, float, int, int, int]] = []
+            for entry in entries:
+                imported.append(
+                    (
+                        float(entry["x"]),
+                        float(entry["y"]),
+                        int(entry.get("label", 1)),
+                        int(entry["frame_idx"]),
+                        int(entry["obj_id"]),
+                    )
+                )
+            self.points = imported
+            self._update_frame()
+            QMessageBox.information(self, "Imported", f"Loaded {len(imported)} prompt point(s) from:\n{path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Import failed", f"Failed to read prompts:\n{exc}")
     
     def _preview_frame(self):
         """Preview segmentation on current frame."""

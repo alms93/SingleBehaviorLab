@@ -340,6 +340,45 @@ def cmd_infer(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_segment(args: argparse.Namespace) -> int:
+    from singlebehaviorlab.backend.segmentation import run_sam2_segmentation
+
+    bar = {"pbar": None}
+
+    def log_fn(msg: str) -> None:
+        logger.info(msg)
+
+    def progress_cb(current: int, total: int) -> None:
+        if bar["pbar"] is None:
+            bar["pbar"] = _progress_bar(total, "segment", disable=args.no_progress)
+        pbar = bar["pbar"]
+        if pbar is not None:
+            pbar.n = current
+            pbar.total = total
+            pbar.refresh()
+            if current >= total:
+                pbar.close()
+
+    try:
+        out = run_sam2_segmentation(
+            args.video,
+            args.prompts,
+            args.out,
+            model_name=args.model,
+            start_frame=args.start_frame,
+            end_frame=args.end_frame,
+            log_fn=log_fn,
+            progress_callback=progress_cb,
+        )
+    finally:
+        if bar["pbar"] is not None:
+            bar["pbar"].close()
+
+    logger.info("Segmentation complete.")
+    logger.info("Mask file: %s", out)
+    return 0
+
+
 def _run_command(args: argparse.Namespace) -> int:
     command = args.command
     if command == "train":
@@ -349,7 +388,7 @@ def _run_command(args: argparse.Namespace) -> int:
     if command == "register":
         return cmd_register(args)
     if command == "segment":
-        return _not_yet_implemented("segment")
+        return cmd_segment(args)
     if command == "cluster":
         return cmd_cluster(args)
     logger.error("Unknown command: %s", command)
