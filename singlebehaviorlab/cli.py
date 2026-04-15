@@ -155,10 +155,71 @@ def _not_yet_implemented(command: str) -> int:
     return 2
 
 
+def _progress_bar(total: int, desc: str, disable: bool):
+    try:
+        from tqdm import tqdm
+    except ImportError:
+        return None
+    return tqdm(total=total, desc=desc, disable=disable, leave=True)
+
+
+def cmd_train(args: argparse.Namespace) -> int:
+    from singlebehaviorlab.backend.training_runner import run_training_session
+
+    overrides: dict[str, object] = {}
+    if args.epochs is not None:
+        overrides["epochs"] = args.epochs
+    if args.batch_size is not None:
+        overrides["batch_size"] = args.batch_size
+    if args.lr is not None:
+        overrides["lr"] = args.lr
+        overrides["classification_lr"] = args.lr
+
+    bar = {"pbar": None}
+
+    def log_fn(msg: str) -> None:
+        logger.info(msg)
+
+    def progress_cb(current: int, total: int) -> None:
+        if bar["pbar"] is None:
+            bar["pbar"] = _progress_bar(total, "training", disable=args.no_progress)
+        pbar = bar["pbar"]
+        if pbar is not None:
+            pbar.n = current
+            pbar.total = total
+            pbar.refresh()
+            if current >= total:
+                pbar.close()
+
+    try:
+        result = run_training_session(
+            args.experiment,
+            config_override=args.config,
+            profile=args.profile,
+            cli_overrides=overrides,
+            output_name=args.output_name,
+            log_fn=log_fn,
+            progress_callback=progress_cb,
+        )
+    finally:
+        if bar["pbar"] is not None:
+            bar["pbar"].close()
+
+    logger.info("Training complete.")
+    logger.info("Checkpoint: %s", result.get("output_path", "<unknown>"))
+    best_val = result.get("best_val_acc")
+    best_f1 = result.get("best_val_f1")
+    if best_val is not None:
+        logger.info("Best val accuracy: %.4f", float(best_val))
+    if best_f1 is not None:
+        logger.info("Best val F1: %.4f", float(best_f1))
+    return 0
+
+
 def _run_command(args: argparse.Namespace) -> int:
     command = args.command
     if command == "train":
-        return _not_yet_implemented("train")
+        return cmd_train(args)
     if command == "infer":
         return _not_yet_implemented("infer")
     if command == "register":
