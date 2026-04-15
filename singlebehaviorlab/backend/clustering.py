@@ -12,12 +12,12 @@ import pickle
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 import pandas as pd
 
-__all__ = ["ClusteringParams", "run_clustering"]
+__all__ = ["ClusteringParams", "run_clustering", "plot_umap_clusters"]
 
 
 @dataclass
@@ -203,3 +203,99 @@ def run_clustering(
         pickle.dump(state, f)
     _log(f"Wrote analysis state: {output_path_obj}")
     return str(output_path_obj)
+
+
+def plot_umap_clusters(
+    state: Union[dict[str, Any], str, os.PathLike[str]],
+    *,
+    show: bool = False,
+    save: Optional[str | os.PathLike[str]] = None,
+    title: Optional[str] = None,
+    figsize: tuple[float, float] = (8.0, 6.0),
+    point_size: float = 6.0,
+):
+    """Plot the UMAP embedding produced by ``run_clustering``.
+
+    Follows the scanpy ``sc.pl.umap`` convention: pass ``show=True`` to pop up
+    an interactive window, pass ``save='foo.pdf'`` to write the figure to
+    disk (format inferred from the extension). Both can be combined.
+
+    Args:
+        state: Either an analysis-state dict (with ``embedding`` and
+            ``clusters`` keys) or the path to a ``.pkl`` file produced by
+            ``run_clustering``.
+        show: Call ``plt.show()`` to open an interactive window.
+        save: Destination path for the rendered figure. PDF, PNG, and SVG
+            are all supported.
+        title: Optional plot title.
+        figsize: Figure size in inches.
+        point_size: Scatter marker size.
+
+    Returns:
+        The matplotlib ``Figure`` object so the caller can further customise
+        or embed it.
+    """
+    import matplotlib
+    if not show and matplotlib.get_backend().lower() not in {"agg", "pdf", "svg", "ps"}:
+        matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    if isinstance(state, (str, os.PathLike)):
+        with open(state, "rb") as f:
+            state = pickle.load(f)
+    if not isinstance(state, dict):
+        raise TypeError("state must be a dict or a path to a clustering .pkl file.")
+
+    embedding = np.asarray(state.get("embedding"))
+    clusters = np.asarray(state.get("clusters"))
+    if embedding is None or embedding.ndim != 2 or embedding.shape[1] < 2:
+        raise ValueError("Analysis state is missing a valid 2D+ UMAP embedding.")
+    if clusters is None or len(clusters) != embedding.shape[0]:
+        raise ValueError("Cluster labels are missing or the wrong length.")
+
+    unique_labels = sorted({int(c) for c in clusters})
+    non_noise = [c for c in unique_labels if c >= 0]
+    cmap = plt.get_cmap("tab20", max(len(non_noise), 1))
+
+    fig, ax = plt.subplots(figsize=figsize)
+    noise_mask = clusters < 0
+    if np.any(noise_mask):
+        ax.scatter(
+            embedding[noise_mask, 0],
+            embedding[noise_mask, 1],
+            s=point_size,
+            color="lightgray",
+            alpha=0.5,
+            label="Noise",
+            linewidths=0,
+        )
+    for i, c in enumerate(non_noise):
+        mask = clusters == c
+        ax.scatter(
+            embedding[mask, 0],
+            embedding[mask, 1],
+            s=point_size,
+            color=cmap(i % cmap.N),
+            alpha=0.85,
+            label=f"Cluster {c}",
+            linewidths=0,
+        )
+
+    ax.set_xlabel("UMAP1")
+    ax.set_ylabel("UMAP2")
+    if title:
+        ax.set_title(title)
+    else:
+        ax.set_title(f"UMAP + {'Noise + ' if np.any(noise_mask) else ''}{len(non_noise)} clusters")
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.legend(loc="best", fontsize="x-small", framealpha=0.85, markerscale=1.5)
+    fig.tight_layout()
+
+    if save:
+        save_path = Path(save).expanduser().resolve()
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, bbox_inches="tight")
+    if show:
+        plt.show()
+
+    return fig

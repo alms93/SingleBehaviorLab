@@ -144,6 +144,10 @@ def _build_parser() -> argparse.ArgumentParser:
     cluster_parser.add_argument("--umap-min-dist", type=float, metavar="X")
     cluster_parser.add_argument("--leiden-resolution", type=float, metavar="X")
     cluster_parser.add_argument("--hdbscan-min-cluster-size", type=int, metavar="N")
+    cluster_parser.add_argument("--plot-save", metavar="PATH",
+                                help="Render the UMAP scatter and save it (PDF/PNG/SVG).")
+    cluster_parser.add_argument("--plot-show", action="store_true",
+                                help="Open the UMAP scatter in an interactive window.")
     _add_common_runtime_flags(cluster_parser)
 
     return parser
@@ -265,7 +269,11 @@ def cmd_register(args: argparse.Namespace) -> int:
 
 
 def cmd_cluster(args: argparse.Namespace) -> int:
-    from singlebehaviorlab.backend.clustering import ClusteringParams, run_clustering
+    from singlebehaviorlab.backend.clustering import (
+        ClusteringParams,
+        plot_umap_clusters,
+        run_clustering,
+    )
 
     params = ClusteringParams(
         method=args.method,
@@ -294,6 +302,12 @@ def cmd_cluster(args: argparse.Namespace) -> int:
     logger.info("Clustering complete.")
     logger.info("Analysis state: %s", out)
     logger.info("Load it via the Clustering tab → 'Load Analysis State'.")
+
+    if args.plot_save or args.plot_show:
+        logger.info("Rendering UMAP scatter...")
+        plot_umap_clusters(out, show=args.plot_show, save=args.plot_save)
+        if args.plot_save:
+            logger.info("Saved plot: %s", args.plot_save)
     return 0
 
 
