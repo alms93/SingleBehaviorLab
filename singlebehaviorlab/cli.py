@@ -216,6 +216,55 @@ def cmd_train(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_register(args: argparse.Namespace) -> int:
+    from singlebehaviorlab.backend.registration import RegistrationParams, run_registration
+
+    params = RegistrationParams(
+        backbone_model=args.backbone,
+    )
+    if args.clip_length is not None:
+        params.clip_length_frames = args.clip_length
+        params.step_frames = args.clip_length
+    if args.target_fps is not None:
+        params.target_fps = int(args.target_fps)
+    if args.clahe is False:
+        params.normalization_method = "None"
+
+    bar = {"pbar": None}
+
+    def log_fn(msg: str) -> None:
+        logger.info(msg)
+
+    def progress_cb(current: int, total: int) -> None:
+        if bar["pbar"] is None:
+            bar["pbar"] = _progress_bar(total, "register", disable=args.no_progress)
+        pbar = bar["pbar"]
+        if pbar is not None:
+            pbar.n = current
+            pbar.total = total
+            pbar.refresh()
+            if current >= total:
+                pbar.close()
+
+    try:
+        result = run_registration(
+            args.video,
+            args.mask,
+            args.out,
+            params=params,
+            log_fn=log_fn,
+            progress_callback=progress_cb,
+        )
+    finally:
+        if bar["pbar"] is not None:
+            bar["pbar"].close()
+
+    logger.info("Registration complete.")
+    logger.info("Matrix:   %s", result["matrix"])
+    logger.info("Metadata: %s", result["metadata"])
+    return 0
+
+
 def _run_command(args: argparse.Namespace) -> int:
     command = args.command
     if command == "train":
@@ -223,7 +272,7 @@ def _run_command(args: argparse.Namespace) -> int:
     if command == "infer":
         return _not_yet_implemented("infer")
     if command == "register":
-        return _not_yet_implemented("register")
+        return cmd_register(args)
     if command == "segment":
         return _not_yet_implemented("segment")
     if command == "cluster":
