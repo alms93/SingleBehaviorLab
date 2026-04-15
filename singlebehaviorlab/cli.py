@@ -298,12 +298,54 @@ def cmd_cluster(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_infer(args: argparse.Namespace) -> int:
+    from singlebehaviorlab.backend.inference import run_inference_on_video
+
+    bar = {"pbar": None}
+
+    def log_fn(msg: str) -> None:
+        logger.info(msg)
+
+    def progress_cb(current: int, total: int) -> None:
+        if bar["pbar"] is None:
+            bar["pbar"] = _progress_bar(total, "infer", disable=args.no_progress)
+        pbar = bar["pbar"]
+        if pbar is not None:
+            pbar.n = current
+            pbar.total = total
+            pbar.refresh()
+            if current >= total:
+                pbar.close()
+
+    try:
+        out = run_inference_on_video(
+            args.model,
+            args.video,
+            args.out,
+            experiment_dir=args.experiment,
+            target_fps=args.target_fps,
+            clip_length=args.clip_length,
+            batch_size=args.batch_size,
+            save_arrays=args.save_arrays,
+            log_fn=log_fn,
+            progress_callback=progress_cb,
+        )
+    finally:
+        if bar["pbar"] is not None:
+            bar["pbar"].close()
+
+    logger.info("Inference complete.")
+    logger.info("Results: %s", out)
+    logger.info("Load via the Inference tab's 'Load results' action to apply smoothing and decoding.")
+    return 0
+
+
 def _run_command(args: argparse.Namespace) -> int:
     command = args.command
     if command == "train":
         return cmd_train(args)
     if command == "infer":
-        return _not_yet_implemented("infer")
+        return cmd_infer(args)
     if command == "register":
         return cmd_register(args)
     if command == "segment":
