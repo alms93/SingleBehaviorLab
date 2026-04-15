@@ -2910,6 +2910,9 @@ class TrainingWidget(QWidget):
                 self.loc_group.setTitle("Localization")
                 self.loc_group.setToolTip("")
             else:
+                self.use_localization_check.setChecked(False)
+                self.use_manual_loc_switch_check.setChecked(False)
+                self.use_crop_jitter_check.setChecked(False)
                 self.loc_group.setTitle("Localization (requires bbox labels)")
                 self.loc_group.setToolTip(
                     "Optional: localizes individual animals when multiple are in camera view.\n"
@@ -3187,14 +3190,25 @@ class TrainingWidget(QWidget):
     def apply_training_config(self, config):
         """Apply a configuration dictionary to the UI components."""
         try:
+            self.use_localization_check.setChecked(False)
+            self.use_manual_loc_switch_check.setChecked(False)
+            self.manual_loc_switch_epoch_spin.setValue(20)
+            self.crop_padding_spin.setValue(0.35)
+            self.use_crop_jitter_check.setChecked(False)
+            self.crop_jitter_strength_spin.setValue(0.15)
+
             if "batch_size" in config: self.batch_size_spin.setValue(config["batch_size"])
             if "epochs" in config: self.epochs_spin.setValue(config["epochs"])
             if "lr" in config:
                 self.class_lr_spin.setValue(config["lr"])
-                if "localization_lr" not in config and "classification_lr" not in config:
-                    self.loc_lr_spin.setValue(config["lr"])
-            if "localization_lr" in config: self.loc_lr_spin.setValue(config["localization_lr"])
-            if "classification_lr" in config: self.class_lr_spin.setValue(config["classification_lr"])
+            if "classification_lr" in config:
+                self.class_lr_spin.setValue(config["classification_lr"])
+            if "localization_lr" in config:
+                self.loc_lr_spin.setValue(config["localization_lr"])
+            elif "classification_lr" in config:
+                self.loc_lr_spin.setValue(config["classification_lr"])
+            elif "lr" in config:
+                self.loc_lr_spin.setValue(config["lr"])
             if "weight_decay" in config: self.weight_decay_spin.setValue(config["weight_decay"])
             if "dropout" in config: self.map_dropout_spin.setValue(config["dropout"])
             if "clip_length" in config: self.clip_length_spin.setValue(config["clip_length"])
