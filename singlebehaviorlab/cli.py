@@ -100,7 +100,6 @@ def _build_parser() -> argparse.ArgumentParser:
         "register",
         help="Extract VideoPrism embeddings from a video and a mask file.",
     )
-    register_parser.add_argument("--experiment", required=True, metavar="DIR")
     register_parser.add_argument("--video", required=True, metavar="PATH")
     register_parser.add_argument("--mask", required=True, metavar="PATH")
     register_parser.add_argument("--out", required=True, metavar="PATH",
