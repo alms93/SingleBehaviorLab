@@ -82,10 +82,11 @@ def _extract_embedding(
             tokens = backbone(tensor)
             embedding = tokens.mean(dim=1).squeeze(0).cpu().numpy()
             if flip_invariant:
-                flipped = torch.flip(tensor, dims=[-1])
-                tokens_f = backbone(flipped)
-                emb_f = tokens_f.mean(dim=1).squeeze(0).cpu().numpy()
-                embedding = (embedding + emb_f) * 0.5
+                embs = [embedding]
+                for dims in [[-1], [-2], [-1, -2]]:
+                    t_flip = torch.flip(tensor, dims=dims)
+                    embs.append(backbone(t_flip).mean(dim=1).squeeze(0).cpu().numpy())
+                embedding = np.mean(embs, axis=0)
         return embedding.astype(np.float32)
     except Exception:
         return None

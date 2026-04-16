@@ -354,7 +354,7 @@ class EmbeddingExtractionWorker(QThread):
             embed_dim = backbone.get_embed_dim()
             self.log_message.emit(f"VideoPrism model loaded. Embedding dimension: {embed_dim}")
             if self.flip_invariant:
-                self.log_message.emit("Flip-invariant mode: averaging original + horizontally flipped embeddings")
+                self.log_message.emit("Flip-invariant mode: averaging 4 orientations (original, hflip, vflip, both)")
             
             feature_matrix = []
             metadata = []
@@ -595,12 +595,13 @@ class EmbeddingExtractionWorker(QThread):
                 embedding = tokens.mean(dim=1).squeeze(0)
                 del tokens
                 if self.flip_invariant:
-                    flipped = torch.flip(frames_tensor, dims=[-1])
-                    tokens_f = backbone(flipped)
-                    emb_f = tokens_f.mean(dim=1).squeeze(0)
-                    del tokens_f, flipped
-                    embedding = (embedding + emb_f) * 0.5
-                    del emb_f
+                    embs = [embedding.cpu().numpy()]
+                    for dims in [[-1], [-2], [-1, -2]]:
+                        t_flip = torch.flip(frames_tensor, dims=dims)
+                        embs.append(backbone(t_flip).mean(dim=1).squeeze(0).cpu().numpy())
+                        del t_flip
+                    embedding = torch.from_numpy(np.mean(embs, axis=0))
+                    del embs
                 del frames_tensor
 
             result = embedding.cpu().numpy()
@@ -813,10 +814,9 @@ class RegistrationWidget(QWidget):
         self.flip_invariant_check = QCheckBox("Flip-invariant embeddings")
         self.flip_invariant_check.setChecked(False)
         self.flip_invariant_check.setToolTip(
-            "Run each clip through VideoPrism twice (original + horizontally flipped)\n"
-            "and average the embeddings. Removes sensitivity to the animal's facing\n"
-            "direction so left-facing and right-facing versions of the same behavior\n"
-            "cluster together. Doubles embedding extraction time."
+            "Run each clip through VideoPrism in 4 orientations (original, hflip,\n"
+            "vflip, both) and average the embeddings. Removes sensitivity to the\n"
+            "animal's facing direction and vertical orientation. 4x extraction time."
         )
         output_layout.addWidget(self.flip_invariant_check)
 
