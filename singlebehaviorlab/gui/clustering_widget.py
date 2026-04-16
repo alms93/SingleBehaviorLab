@@ -795,9 +795,6 @@ class ClusteringWidget(QWidget):
 
             proj = np.load(result["matrix"], allow_pickle=True)
             self.matrix_data = pd.DataFrame(proj["matrix"], index=proj["feature_names"], columns=proj["snippet_ids"])
-            self.processed_data = None
-            self.preprocess_status.setText(f"Learned behavior features (128-dim). Apply preprocessing to continue.")
-            self.preprocess_status.setStyleSheet("color: green;")
 
             for f in [tmp_matrix, tmp_metadata, out_matrix, result.get("metadata")]:
                 if f and os.path.exists(f):
@@ -805,6 +802,19 @@ class ClusteringWidget(QWidget):
                         os.unlink(f)
                     except Exception:
                         pass
+
+            X = self.matrix_data.T
+            X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+            from sklearn.preprocessing import StandardScaler
+            X_norm = StandardScaler().fit_transform(X)
+            self.processed_data = pd.DataFrame(X_norm, index=X.index, columns=range(X_norm.shape[1]))
+
+            n = self.matrix_data.shape[1]
+            self.preprocess_status.setText(
+                f"Behavior features: {n} clips → 128-dim (contrastive) → standardized. Ready to cluster."
+            )
+            self.preprocess_status.setStyleSheet("color: green;")
+            self.run_btn.setEnabled(True)
 
         except Exception as e:
             self.preprocess_status.setText(f"Feature learning failed: {e}")
