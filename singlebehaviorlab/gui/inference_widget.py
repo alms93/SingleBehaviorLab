@@ -289,6 +289,7 @@ class InferenceWidget(QWidget):
         self.use_ignore_threshold_check.setChecked(self.use_ignore_threshold)
         self.use_ignore_threshold_check.stateChanged.connect(self._on_ignore_threshold_changed)
         timeline_controls_layout.addWidget(self.use_ignore_threshold_check)
+        self._advanced_widgets.append(self.use_ignore_threshold_check)
         self.ignore_threshold_spin = QDoubleSpinBox()
         self.ignore_threshold_spin.setDecimals(2)
         self.ignore_threshold_spin.setRange(0.0, 1.0)
@@ -299,11 +300,15 @@ class InferenceWidget(QWidget):
             "Clips below this confidence are grayed out."
         )
         self.ignore_threshold_spin.valueChanged.connect(self._on_ignore_threshold_changed)
-        timeline_controls_layout.addWidget(QLabel("Default τ:"))
+        self._lbl_default_tau = QLabel("Default τ:")
+        timeline_controls_layout.addWidget(self._lbl_default_tau)
+        self._advanced_widgets.append(self._lbl_default_tau)
         timeline_controls_layout.addWidget(self.ignore_threshold_spin)
+        self._advanced_widgets.append(self.ignore_threshold_spin)
         self.per_class_thresh_btn = QPushButton("Per-class τ")
         self.per_class_thresh_btn.clicked.connect(self._open_per_class_thresholds_dialog)
         timeline_controls_layout.addWidget(self.per_class_thresh_btn)
+        self._advanced_widgets.append(self.per_class_thresh_btn)
 
         timeline_controls_layout.addWidget(QLabel("Theme:"))
         self.timeline_theme_combo = QComboBox()
@@ -313,11 +318,22 @@ class InferenceWidget(QWidget):
         self.timeline_theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         timeline_controls_layout.addWidget(self.timeline_theme_combo)
         
+        self._advanced_toggle = QPushButton("Advanced")
+        self._advanced_toggle.setCheckable(True)
+        self._advanced_toggle.setChecked(False)
+        self._advanced_toggle.setToolTip("Show/hide detailed post-processing controls")
+        self._advanced_toggle.setStyleSheet("font-size: 10px; padding: 2px 8px;")
+        self._advanced_toggle.toggled.connect(self._toggle_advanced_controls)
+        timeline_controls_layout.addWidget(self._advanced_toggle)
+
+        self._advanced_widgets: list = []
+
         self.merge_timeline_check = QCheckBox("Merge consecutive identical behaviors")
         self.merge_timeline_check.setToolTip("Merge consecutive clips with the same predicted behavior")
         self.merge_timeline_check.stateChanged.connect(self._on_merge_changed)
         timeline_controls_layout.addWidget(self.merge_timeline_check)
-        
+        self._advanced_widgets.append(self.merge_timeline_check)
+
         self.frame_aggregation_check = QCheckBox("Precise frame boundaries")
         self.frame_aggregation_check.setToolTip(
             "Use overlapping clip votes to determine precise behavior boundaries.\n"
@@ -336,8 +352,11 @@ class InferenceWidget(QWidget):
         self.use_viterbi_check.setChecked(self.use_viterbi_decode)
         self.use_viterbi_check.stateChanged.connect(self._on_viterbi_changed)
         timeline_controls_layout.addWidget(self.use_viterbi_check)
+        self._advanced_widgets.append(self.use_viterbi_check)
 
-        timeline_controls_layout.addWidget(QLabel("Viterbi switch:"))
+        self._lbl_viterbi_switch = QLabel("Viterbi switch:")
+        timeline_controls_layout.addWidget(self._lbl_viterbi_switch)
+        self._advanced_widgets.append(self._lbl_viterbi_switch)
         self.viterbi_switch_penalty_spin = QDoubleSpinBox()
         self.viterbi_switch_penalty_spin.setDecimals(2)
         self.viterbi_switch_penalty_spin.setRange(0.0, 5.0)
@@ -349,6 +368,7 @@ class InferenceWidget(QWidget):
         )
         self.viterbi_switch_penalty_spin.valueChanged.connect(self._on_viterbi_changed)
         timeline_controls_layout.addWidget(self.viterbi_switch_penalty_spin)
+        self._advanced_widgets.append(self.viterbi_switch_penalty_spin)
 
         self.per_class_seg_btn = QPushButton("Per-class seg rules")
         self.per_class_seg_btn.setToolTip(
@@ -356,6 +376,7 @@ class InferenceWidget(QWidget):
         )
         self.per_class_seg_btn.clicked.connect(self._open_per_class_segment_rules_dialog)
         timeline_controls_layout.addWidget(self.per_class_seg_btn)
+        self._advanced_widgets.append(self.per_class_seg_btn)
 
         self.ovr_rows_check = QCheckBox("Per-class rows")
         self.ovr_rows_check.setChecked(True)
@@ -364,6 +385,7 @@ class InferenceWidget(QWidget):
         )
         self.ovr_rows_check.stateChanged.connect(lambda: self._draw_timeline())
         timeline_controls_layout.addWidget(self.ovr_rows_check)
+        self._advanced_widgets.append(self.ovr_rows_check)
 
         self.ovr_show_all_check = QCheckBox("Show all classes")
         self.ovr_show_all_check.setChecked(False)
@@ -374,6 +396,7 @@ class InferenceWidget(QWidget):
         )
         self.ovr_show_all_check.stateChanged.connect(self._on_ovr_show_all_changed)
         timeline_controls_layout.addWidget(self.ovr_show_all_check)
+        self._advanced_widgets.append(self.ovr_show_all_check)
 
         timeline_controls_layout.addWidget(QLabel("Zoom (px/s):"))
         self.timeline_zoom_spin = QSpinBox()
@@ -424,6 +447,8 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.model_changed.connect(self._on_segments_edited)
         self._segments_model = None
         
+        self._toggle_advanced_controls(False)
+
         timeline_group_layout.addWidget(timeline_controls_scroll)
         timeline_group_layout.addWidget(self._interactive_timeline, 1)
         timeline_preset_row = QHBoxLayout()
@@ -2882,6 +2907,10 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.set_filter(filter_idx)
         self._interactive_timeline.set_model(model, colors)
     
+    def _toggle_advanced_controls(self, show: bool):
+        for w in self._advanced_widgets:
+            w.setVisible(show)
+
     def _on_interactive_segment_clicked(self, seg_index: int):
         if not self._segments_model or seg_index < 0 or seg_index >= len(self._segments_model):
             return
