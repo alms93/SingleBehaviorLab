@@ -27,7 +27,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QComboBox, QSlider, QCheckBox, QGroupBox, QScrollArea, QSplitter,
     QMessageBox, QListWidget, QTextEdit, QFileDialog, QProgressBar, QDialog,
-    QSizePolicy, QDialogButtonBox
+    QSizePolicy, QDialogButtonBox, QApplication
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont
