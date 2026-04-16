@@ -3238,6 +3238,16 @@ class InferenceWidget(QWidget):
 
         frame_labels = self._apply_gap_merge_and_min_seg(frame_labels, T)
 
+        overrides = getattr(self, "_refined_clip_overrides", {})
+        if overrides and hasattr(self, "clip_starts") and self.clip_starts:
+            orig_fps = self._get_video_fps(self.video_path) if self.video_path else 30.0
+            fi = self._get_saved_frame_interval(self.video_path, orig_fps)
+            cl = max(1, self.clip_length_spin.value())
+            for clip_i, new_cls in overrides.items():
+                if clip_i < len(self.clip_starts):
+                    cs = self.clip_starts[clip_i]
+                    ce = min(cs + (cl - 1) * fi + 1, T)
+                    frame_labels[cs:ce] = new_cls
 
         segments = []
         cur_cls = int(frame_labels[0])
@@ -3390,6 +3400,7 @@ class InferenceWidget(QWidget):
         # Apply corrections + ignore-threshold gating
         corrected_preds = self._effective_predictions()
 
+        self._refined_clip_overrides = {}
         if self.embedding_refine_check.isChecked():
             clip_embs = None
             if self.video_path and self.video_path in self.results_cache:
@@ -3402,7 +3413,9 @@ class InferenceWidget(QWidget):
                     clip_labels, clip_embs, clip_confs,
                     confidence_threshold=float(self.embedding_refine_threshold.value()),
                 )
-                corrected_preds = refined.tolist()
+                for i in range(len(refined)):
+                    if refined[i] != clip_labels[i]:
+                        self._refined_clip_overrides[i] = int(refined[i])
 
         # Initialize score matrix: [total_frames, num_classes] and coverage count
         frame_scores = np.zeros((total_frames, num_classes), dtype=np.float32)
