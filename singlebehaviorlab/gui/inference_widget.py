@@ -285,6 +285,8 @@ class InferenceWidget(QWidget):
         self.cleanup_preset_combo.currentTextChanged.connect(self._on_cleanup_preset_changed)
         timeline_controls_layout.addWidget(self.cleanup_preset_combo)
 
+        self._advanced_widgets: list = []
+
         self.use_ignore_threshold_check = QCheckBox("Ignore low-confidence")
         self.use_ignore_threshold_check.setChecked(self.use_ignore_threshold)
         self.use_ignore_threshold_check.stateChanged.connect(self._on_ignore_threshold_changed)
@@ -325,8 +327,6 @@ class InferenceWidget(QWidget):
         self._advanced_toggle.setStyleSheet("font-size: 10px; padding: 2px 8px;")
         self._advanced_toggle.toggled.connect(self._toggle_advanced_controls)
         timeline_controls_layout.addWidget(self._advanced_toggle)
-
-        self._advanced_widgets: list = []
 
         self.merge_timeline_check = QCheckBox("Merge consecutive identical behaviors")
         self.merge_timeline_check.setToolTip("Merge consecutive clips with the same predicted behavior")
