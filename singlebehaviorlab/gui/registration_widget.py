@@ -540,25 +540,7 @@ class EmbeddingExtractionWorker(QThread):
                 self.log_message.emit(f"NPZ save failed (metadata): {e}")
                 npz_metadata_path = None
 
-            # Also save Parquet as backup (faster than CSV, still readable)
-            try:
-                matrix_df = pd.DataFrame(feature_matrix.T, index=feature_names, columns=snippet_ids)
-                parquet_matrix_path = os.path.join(self.output_dir, f'{base_name}_matrix.parquet')
-                matrix_df.to_parquet(parquet_matrix_path, index=True)
-                self.log_message.emit(f"Saved feature matrix (Parquet) to {parquet_matrix_path}")
-            except Exception as e:
-                self.log_message.emit(f"Parquet save failed (matrix): {e}")
-            
-            try:
-                parquet_metadata_path = os.path.join(self.output_dir, f'{base_name}_metadata.parquet')
-                metadata_df.to_parquet(parquet_metadata_path, index=False)
-                self.log_message.emit(f"Saved metadata (Parquet) to {parquet_metadata_path}")
-            except Exception as e:
-                self.log_message.emit(f"Parquet save failed (metadata): {e}")
-
-            # Emit NPZ paths (primary format)
-            self.finished.emit(npz_matrix_path if npz_matrix_path else parquet_matrix_path, 
-                             npz_metadata_path if npz_metadata_path else parquet_metadata_path)
+            self.finished.emit(npz_matrix_path, npz_metadata_path)
             
         except Exception as e:
             import traceback
