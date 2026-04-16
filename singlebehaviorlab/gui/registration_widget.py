@@ -812,14 +812,6 @@ class RegistrationWidget(QWidget):
         )
         output_layout.addWidget(self.flip_invariant_check)
 
-        self.align_orientation_check = QCheckBox("Align orientation (mask PCA)")
-        self.align_orientation_check.setChecked(False)
-        self.align_orientation_check.setToolTip(
-            "Detect the animal's body axis from the SAM2 mask via PCA and rotate\n"
-            "each clip to align the major axis horizontally before embedding.\n"
-            "Removes rotational variation without extra VideoPrism runs."
-        )
-        output_layout.addWidget(self.align_orientation_check)
 
         self.append_embeddings_check = QCheckBox("Append to existing embeddings if present")
         self.append_embeddings_check.setChecked(False)
@@ -1100,39 +1092,6 @@ class RegistrationWidget(QWidget):
             else:
                 clip_paths_list.append(item)
 
-        if self.align_orientation_check.isChecked() and self.video_mask_pairs:
-            mask_path = self.video_mask_pairs[0][1] if self.video_mask_pairs else None
-            if mask_path:
-                from singlebehaviorlab.backend.registration import _compute_mask_angle, _rotate_frames
-                rotated = 0
-                for clip_path, (sf, ef) in self.clip_frame_ranges.items():
-                    if sf is None or ef is None:
-                        continue
-                    angle = _compute_mask_angle(mask_path, int(sf), int(ef))
-                    if abs(angle) < 2.0:
-                        continue
-                    cap = cv2.VideoCapture(clip_path)
-                    if not cap.isOpened():
-                        continue
-                    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-                    frames = []
-                    while True:
-                        ret, frame = cap.read()
-                        if not ret:
-                            break
-                        frames.append(frame)
-                    cap.release()
-                    if not frames:
-                        continue
-                    arr = _rotate_frames(np.array(frames), angle)
-                    h, w = arr.shape[1], arr.shape[2]
-                    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-                    writer = cv2.VideoWriter(clip_path, fourcc, fps, (w, h))
-                    for f in arr:
-                        writer.write(f)
-                    writer.release()
-                    rotated += 1
-                self.log_text.append(f"Orientation alignment: rotated {rotated}/{len(self.clip_frame_ranges)} clips")
         
         # Group clips by video (using extracted paths)
         clips_by_video = {}
