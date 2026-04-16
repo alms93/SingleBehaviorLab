@@ -443,10 +443,18 @@ class InferenceWidget(QWidget):
         self.timeline_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.timeline_scroll.setMinimumHeight(100)
         self.timeline_scroll.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        
+
         self.timeline_widget = TimelineWidget()
         self.timeline_widget.click_callback = self._show_clip_popup
         self.timeline_scroll.setWidget(self.timeline_widget)
+
+        from singlebehaviorlab.gui.interactive_timeline import InteractiveTimeline
+        self._interactive_timeline = InteractiveTimeline()
+        self._interactive_timeline.setMinimumHeight(120)
+        self._interactive_timeline.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self._interactive_timeline.segment_clicked.connect(self._on_interactive_segment_clicked)
+        self._interactive_timeline.frame_clicked.connect(self._on_interactive_frame_clicked)
+        self._interactive_timeline.setVisible(False)
         
         # Container for OvR multi-row: two scroll areas side by side with synced vertical scroll
         self._ovr_timeline_container = QWidget()
@@ -492,6 +500,7 @@ class InferenceWidget(QWidget):
         )
 
         timeline_group_layout.addWidget(timeline_controls_scroll)
+        timeline_group_layout.addWidget(self._interactive_timeline, 2)
         timeline_group_layout.addWidget(self.timeline_scroll, 1)
         timeline_group_layout.addWidget(self._ovr_timeline_container, 1)
         timeline_preset_row = QHBoxLayout()
@@ -2748,6 +2757,8 @@ class InferenceWidget(QWidget):
 
         # OvR per-class row timeline
         if ovr_rows:
+            self._interactive_timeline.setVisible(False)
+            self.timeline_scroll.setVisible(False)
             if frame_aggregation_enabled:
                 need_precise_recompute = (
                     not self.aggregated_segments
@@ -2759,10 +2770,16 @@ class InferenceWidget(QWidget):
             self._draw_ovr_multirow_timeline()
             return
 
-        # Use frame-aggregated segments if enabled
+        # Frame-aggregated: use the interactive QGraphicsView timeline
         if frame_aggregation_enabled and self.aggregated_segments:
+            self._interactive_timeline.setVisible(True)
+            self.timeline_scroll.setVisible(False)
             self._draw_frame_aggregated_timeline()
             return
+
+        # Clip-based: use the original pixmap timeline
+        self._interactive_timeline.setVisible(False)
+        self.timeline_scroll.setVisible(True)
         
         # Original clip-based timeline drawing
         corrected_preds = self._effective_predictions()
@@ -3165,14 +3182,12 @@ class InferenceWidget(QWidget):
         return super().eventFilter(obj, event)
 
     def _draw_frame_aggregated_timeline(self):
-        """Draw timeline using frame-level aggregated segments with precise boundaries."""
+        """Render the frame-level aggregated timeline via the interactive QGraphicsView widget."""
         if not self.aggregated_segments or not self.classes:
             return
-        
-        segments = self.aggregated_segments
-        num_segments = len(segments)
-        
-        # Use original video length so timeline matches full video
+
+        from singlebehaviorlab.backend.segments import SegmentsModel
+
         total_frames = self.total_frames
         if total_frames <= 0 and self.video_path and os.path.exists(self.video_path):
             try:
@@ -3181,119 +3196,47 @@ class InferenceWidget(QWidget):
                 cap.release()
             except Exception:
                 pass
-        if total_frames <= 0 and segments:
-            total_frames = segments[-1]['end'] + 1
-        
-        # Calculate timeline dimensions using the zoom spinbox (px per second of video).
-        # This removes the artificial max_width cap — the scroll area handles overflow.
-        px_per_sec = float(getattr(self, "timeline_zoom_spin", None) and self.timeline_zoom_spin.value() or 100)
-        orig_fps_tl = self._get_video_fps(self.video_path) if self.video_path else 30.0
-        pixels_per_frame = max(0.5, px_per_sec / orig_fps_tl)
-        total_width = max(800, int(total_frames * pixels_per_frame))
-        height = 60
-        
-        self.timeline_widget.setMinimumWidth(total_width)
-        pixmap = QPixmap(total_width, height)
-        pixmap.fill(QColor(255, 255, 255))
-        
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
-        colors = self._get_timeline_qcolors()
-        
-        selected_behavior = self.filter_behavior_combo.currentText()
-        
-        for seg in segments:
-            pred_idx = seg['class']
-            conf = seg.get('confidence', 1.0)
-            start_frame = seg['start']
-            end_frame = seg['end']
-            
-            # Calculate pixel positions
-            x_start = int(start_frame * pixels_per_frame)
-            x_end = int((end_frame + 1) * pixels_per_frame)
-            seg_width = max(1, x_end - x_start)
+        if total_frames <= 0 and self.aggregated_segments:
+            total_frames = self.aggregated_segments[-1]["end"] + 1
 
-            if pred_idx < 0:
-                label = "Filtered"
-            elif pred_idx < len(self.classes):
-                label = self.classes[pred_idx]
-            else:
-                continue
-            
-            if selected_behavior == "All Behaviors":
-                is_selected = True
-            elif selected_behavior == self.ignore_label_name:
-                is_selected = (pred_idx < 0)
-            else:
-                is_selected = (label == selected_behavior)
-            
-            if is_selected:
-                if pred_idx < 0:
-                    color = QColor(180, 180, 180)
-                    color.setAlpha(160)
-                else:
-                    color = colors[pred_idx % len(colors)]
-                    alpha = int(min(255, 128 + 127 * min(1.0, conf)))
-                    color.setAlpha(alpha)
-            else:
-                color = QColor(240, 240, 240)
-                color.setAlpha(255)
-            
-            painter.fillRect(x_start, 0, seg_width, height, color)
-            
-            # Draw label if segment is wide enough
-            if seg_width >= 40 and is_selected:
-                painter.setPen(QColor(0, 0, 0))
-                painter.setFont(QFont("Arial", 8))
-                painter.drawText(x_start + 3, 20, label)
-            
-            # Draw boundary markers
-            if is_selected:
-                painter.setPen(QColor(0, 0, 0, 100))
-                painter.drawLine(x_start, 0, x_start, height)
-        
-        # Draw info text
-        painter.setPen(QColor(0, 0, 0))
-        painter.setFont(QFont("Arial", 8))
-        
         orig_fps = self._get_video_fps(self.video_path) if self.video_path else 30.0
-        duration_sec = total_frames / orig_fps
-        painter.drawText(5, height - 5, 
-            f"Frame Timeline: {num_segments} segments, {total_frames} frames ({duration_sec:.1f}s) - precise boundaries (click to view)")
-        
-        painter.end()
-        
-        label = QLabel()
-        label.setPixmap(pixmap)
-        label.setFixedSize(total_width, height)
 
-        old_layout = self.timeline_widget.layout()
-        if old_layout:
-            while old_layout.count():
-                child = old_layout.takeAt(0)
-                if child.widget():
-                    child.widget().deleteLater()
-        else:
-            layout = QVBoxLayout()
-            layout.setContentsMargins(0, 0, 0, 0)
-            self.timeline_widget.setLayout(layout)
+        model = SegmentsModel(self.aggregated_segments, self.classes, total_frames, orig_fps)
+        self._segments_model = model
 
-        self.timeline_widget.layout().addWidget(label)
-        self.timeline_widget.setFixedSize(total_width, height)
+        colors = self._get_timeline_qcolors()
+        px_per_sec = float(self.timeline_zoom_spin.value() if hasattr(self, "timeline_zoom_spin") else 100)
+        ppf = max(0.5, px_per_sec / orig_fps)
 
-        # Store info for click handling in frame mode
-        self.timeline_widget._frame_mode = True
-        self.timeline_widget._pixels_per_frame = pixels_per_frame
-        self.timeline_widget._total_frames = total_frames
+        filter_idx = None
+        selected_behavior = self.filter_behavior_combo.currentText()
+        if selected_behavior != "All Behaviors":
+            if selected_behavior == self.ignore_label_name:
+                filter_idx = -1
+            elif selected_behavior in self.classes:
+                filter_idx = self.classes.index(selected_behavior)
+
+        self._interactive_timeline.set_zoom(ppf)
+        self._interactive_timeline.set_filter(filter_idx)
+        self._interactive_timeline.set_model(model, colors)
     
+    def _on_interactive_segment_clicked(self, seg_index: int):
+        if not hasattr(self, "_segments_model") or self._segments_model is None:
+            return
+        if seg_index < 0 or seg_index >= len(self._segments_model):
+            return
+        seg = self._segments_model[seg_index]
+        seg_dict = seg.to_dict()
+        self._show_clip_popup(seg.start, frame_mode=True)
+
+    def _on_interactive_frame_clicked(self, frame_idx: int):
+        self._show_clip_popup(frame_idx, frame_mode=True)
+
     def _on_filter_changed(self, index: int):
-        """Handle behavior filter change."""
         if self.predictions:
             self._draw_timeline()
 
     def _on_theme_changed(self, index: int):
-        """Handle timeline theme change."""
         if self.predictions:
             self._draw_timeline()
 
