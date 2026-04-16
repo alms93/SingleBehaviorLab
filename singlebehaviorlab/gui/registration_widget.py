@@ -379,15 +379,7 @@ class EmbeddingExtractionWorker(QThread):
                     self.log_message.emit(f"Warning: Could not load frames from {clip_name}, skipping")
                     continue
                 
-                rot_angle = 0.0
-                if self.align_orientation and self.mask_path:
-                    start_f = self.clip_frame_ranges.get(clip_path, (None, None))[0] if clip_path in self.clip_frame_ranges else None
-                    end_f = self.clip_frame_ranges.get(clip_path, (None, None))[1] if clip_path in self.clip_frame_ranges else None
-                    if start_f is not None and end_f is not None:
-                        from singlebehaviorlab.backend.registration import _compute_mask_angle
-                        rot_angle = _compute_mask_angle(self.mask_path, int(start_f), int(end_f))
-
-                embedding = self._extract_embedding(backbone, frames, rot_angle)
+                embedding = self._extract_embedding(backbone, frames)
                 del frames
                 
                 if embedding is None:
@@ -577,12 +569,9 @@ class EmbeddingExtractionWorker(QThread):
         cap.release()
         return np.array(frames) if frames else None
     
-    def _extract_embedding(self, backbone: VideoPrismBackbone, frames: np.ndarray, rotation_angle: float = 0.0) -> np.ndarray:
+    def _extract_embedding(self, backbone: VideoPrismBackbone, frames: np.ndarray) -> np.ndarray:
         try:
             target_size = 288
-            if abs(rotation_angle) >= 2.0:
-                from singlebehaviorlab.backend.registration import _rotate_frames
-                frames = _rotate_frames(frames, rotation_angle)
             processed_frames = []
             for frame in frames:
                 resized = cv2.resize(frame, (target_size, target_size))
@@ -1103,7 +1092,6 @@ class RegistrationWidget(QWidget):
         self.log_text.append(f"Output directory: {self.output_dir}")
         self.log_text.append(f"Created {len(output_paths)} clip(s)")
         
-        # Extract clip paths and frame ranges from tuples
         clip_paths_list = []
         self.clip_frame_ranges = {}
         for item in output_paths:
@@ -1112,8 +1100,41 @@ class RegistrationWidget(QWidget):
                 clip_paths_list.append(clip_path)
                 self.clip_frame_ranges[clip_path] = (start_frame, end_frame)
             else:
-                # Legacy: just a path string
                 clip_paths_list.append(item)
+
+        if self.align_orientation_check.isChecked() and self.video_mask_pairs:
+            mask_path = self.video_mask_pairs[0][1] if self.video_mask_pairs else None
+            if mask_path:
+                from singlebehaviorlab.backend.registration import _compute_mask_angle, _rotate_frames
+                rotated = 0
+                for clip_path, (sf, ef) in self.clip_frame_ranges.items():
+                    if sf is None or ef is None:
+                        continue
+                    angle = _compute_mask_angle(mask_path, int(sf), int(ef))
+                    if abs(angle) < 2.0:
+                        continue
+                    cap = cv2.VideoCapture(clip_path)
+                    if not cap.isOpened():
+                        continue
+                    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                    frames = []
+                    while True:
+                        ret, frame = cap.read()
+                        if not ret:
+                            break
+                        frames.append(frame)
+                    cap.release()
+                    if not frames:
+                        continue
+                    arr = _rotate_frames(np.array(frames), angle)
+                    h, w = arr.shape[1], arr.shape[2]
+                    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                    writer = cv2.VideoWriter(clip_path, fourcc, fps, (w, h))
+                    for f in arr:
+                        writer.write(f)
+                    writer.release()
+                    rotated += 1
+                self.log_text.append(f"Orientation alignment: rotated {rotated}/{len(self.clip_frame_ranges)} clips")
         
         # Group clips by video (using extracted paths)
         clips_by_video = {}
@@ -1281,6 +1302,7 @@ class RegistrationWidget(QWidget):
         mask_path = None
         if self.align_orientation_check.isChecked() and self.video_mask_pairs:
             mask_path = self.video_mask_pairs[0][1] if len(self.video_mask_pairs) > 0 else None
+            self.log_text.append(f"Align orientation: mask_path={mask_path}, pairs={len(self.video_mask_pairs)}, frame_ranges={len(self.clip_frame_ranges)}")
 
         self.embedding_worker = EmbeddingExtractionWorker(
             clip_paths,
