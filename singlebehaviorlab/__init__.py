@@ -19,7 +19,7 @@ or videoprism. Each symbol triggers its underlying backend module only on
 first access.
 """
 
-__version__ = "2.1.0"
+__version__ = "2.2.0"
 __author__ = "Almir Aljovic"
 
 # Mapping of public name → (backend module, attribute name).
