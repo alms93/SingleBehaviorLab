@@ -11,15 +11,15 @@ Two Jupyter notebooks walking through SingleBehaviorLab's pipelines end-to-end v
 
 ## What you need to provide
 
-Everything lives in the `demo/data/` folder. Drop the following files there before running the notebooks:
+### Segmentation + clustering (notebook 02)
 
-| File | Needed for | Description |
-|---|---|---|
-| `demo.mp4` | both notebooks | The video to process. Any reasonable length works — the segmentation + clustering notebook is tuned for the first ~1000 frames. |
-| `sam2_prompts.json` | notebook 02 | Point prompts exported from the GUI Segmentation tab via **Export prompts**. |
-| `experiment/` | notebook 01 | A labeled experiment directory (`config.yaml`, `data/annotations/annotations.json`, `data/clips/`). Create it in the GUI — *File → New Experiment* — and label a handful of clips before running the notebook. |
+A silent demo video and matching prompts JSON are already bundled under `demo/data/segmentation_clustering/`, so notebook 02 runs out of the box. The default configuration processes the first 2000 frames (a few minutes on a single GPU); flip `FULL_VIDEO = True` in the first code cell to process the whole clip.
 
-None of the demo data is checked into the repository; the notebooks assume you populate `demo/data/` yourself.
+Replace the bundled files with your own `Demo_video.mp4` and `sam2_prompts.json` if you want to try a different recording. Point prompts are exported from the GUI Segmentation tab via the **Export prompts** button.
+
+### Behavior sequencing (notebook 01)
+
+Notebook 01 needs a labeled experiment directory, which cannot be pre-bundled because it depends on your class taxonomy. Create one in the app (*File → New Experiment*), label a handful of clips in the Labeling tab, and point the `EXPERIMENT` variable in the notebook at the resulting folder. A minimal sanity-check experiment with 30–50 labeled clips across two or three behavior classes is enough to see the pipeline end-to-end.
 
 ## Running the notebooks
 

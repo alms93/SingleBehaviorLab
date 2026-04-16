@@ -1,0 +1,8 @@
+{
+  "video_path": "Demo_video.mp4",
+  "prompts": [
+    {"frame_idx": 0, "obj_id": 1, "x": 508.0, "y": 485.0, "label": 1},
+    {"frame_idx": 0, "obj_id": 1, "x": 787.0, "y": 438.0, "label": 0},
+    {"frame_idx": 0, "obj_id": 1, "x": 616.0, "y": 508.0, "label": 1}
+  ]
+}

@@ -32,3 +32,11 @@ experiments/*/models/behavior_heads/*.pt
 # OS
 .DS_Store
 Thumbs.db
+
+# Generated outputs from the demo notebooks
+demo/data/**/*_masks.h5
+demo/data/**/*_matrix.npz
+demo/data/**/*_metadata.npz
+demo/data/**/*_analysis.pkl
+demo/data/**/*_umap.pdf
+demo/data/**/*_clips/
