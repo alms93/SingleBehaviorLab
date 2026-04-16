@@ -13,10 +13,10 @@ top level, so the typical usage is::
     sbl.train(experiment_dir, profile="balanced")
     sbl.infer(model, video, out_json, experiment_dir=experiment_dir)
 
-The re-exports use lazy import (PEP 562 ``__getattr__``) so that simply
-running ``import singlebehaviorlab`` does not pull in torch, jax,
-tensorflow, sam2, or videoprism. Each symbol triggers its underlying
-backend module only on first access.
+The re-exports use lazy attribute loading (PEP 562 ``__getattr__``) so that
+``import singlebehaviorlab`` does not pull in torch, jax, tensorflow, sam2,
+or videoprism. Each symbol triggers its underlying backend module only on
+first access.
 """
 
 __version__ = "2.1.0"
