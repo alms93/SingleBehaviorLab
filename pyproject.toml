@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "singlebehaviorlab"
-version = "2.3.3"
+version = "2.3.4"
 description = "Behavioral sequencing and phenotyping with lightweight task specific adaptation"
 readme = "README.md"
 license = { file = "LICENSE" }
