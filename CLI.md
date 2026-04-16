@@ -370,6 +370,7 @@ import singlebehaviorlab as sbl
 | `sbl.RegistrationParams`, `sbl.ClusteringParams` | Dataclasses carrying tuning knobs for register and cluster. |
 | `sbl.load_prompts_json`, `sbl.save_prompts_json` | Helpers for the SAM2 prompts file format. |
 | `sbl.load_config(path=None)` | Load an experiment `config.yaml` with sensible defaults. |
+| `sbl.load_demo(name="segmentation_clustering")` | Download the bundled demo video and prompts into `~/.cache/singlebehaviorlab/demos/` (or a `destination=` override) and return a dict of local file paths. Powers the Colab demo notebook and is useful for any reproducible walkthrough. |
 
 The re-exports use lazy import (`__getattr__`) so `import singlebehaviorlab` stays cheap — torch, jax, tensorflow, sam2, and videoprism only load when you actually touch one of the functions above. The fully-qualified `singlebehaviorlab.backend.*` paths still work if you prefer them.
 

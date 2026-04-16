@@ -35,6 +35,8 @@ _PUBLIC_API = {
     "infer": ("singlebehaviorlab.backend.inference", "run_inference_on_video"),
     "train": ("singlebehaviorlab.backend.training_runner", "run_training_session"),
     "load_config": ("singlebehaviorlab.config", "load_config"),
+    "load_demo": ("singlebehaviorlab.demo", "load_demo"),
+    "DEMOS": ("singlebehaviorlab.demo", "DEMOS"),
 }
 
 __all__ = ["__version__", "__author__", *sorted(_PUBLIC_API)]

@@ -1,6 +1,8 @@
 # Demo notebooks
 
-Two Jupyter notebooks walking through SingleBehaviorLab's pipelines end-to-end via the Python API. They mirror what the CLI does but run inline so you can follow along and inspect every output as it's produced.
+Three Jupyter notebooks walking through SingleBehaviorLab's pipelines end-to-end. The two local notebooks use the Python API on your own machine; the Colab notebook runs the full segmentation + clustering pipeline in a free GPU runtime without any local install.
+
+**Try it in Colab:** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/alms93/SingleBehaviorLab/blob/main/demo/colab_segmentation_clustering.ipynb)
 
 ## Contents
 
@@ -8,6 +10,7 @@ Two Jupyter notebooks walking through SingleBehaviorLab's pipelines end-to-end v
 |---|---|
 | [`01_behavior_sequencing.ipynb`](01_behavior_sequencing.ipynb) | Train a behavior classifier from a labeled experiment directory and run inference on a new video. |
 | [`02_segmentation_clustering.ipynb`](02_segmentation_clustering.ipynb) | SAM2 segmentation from point prompts → VideoPrism embedding extraction → UMAP + Leiden clustering, with an inline UMAP plot. |
+| [`colab_segmentation_clustering.ipynb`](colab_segmentation_clustering.ipynb) | Colab-friendly version of notebook 02. Installs SingleBehaviorLab from PyPI, downloads the bundled demo assets via `sbl.load_demo`, and runs the full pipeline on a free GPU runtime. |
 
 ## What you need to provide
 
