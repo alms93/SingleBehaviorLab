@@ -45,7 +45,6 @@ import jax.numpy as jnp
 import huggingface_hub
 import numpy as np
 from videoprism import encoders
-from videoprism import tokenizers
 from videoprism import utils
 
 K400_NUM_CLASSES: int = 400
@@ -336,7 +335,8 @@ def load_pretrained_weights(
   return jax.tree_util.tree_map(jnp.asarray, variables)
 
 
-def load_text_tokenizer(name: str) -> tokenizers.Tokenizer:
+def load_text_tokenizer(name: str):
+  from videoprism import tokenizers  # lazy: avoids top-level TF dependency
   """Loads a text tokenizer by name.
 
   Args:
@@ -353,7 +353,7 @@ def load_text_tokenizer(name: str) -> tokenizers.Tokenizer:
 
 
 def tokenize_texts(
-    tokenizer: tokenizers.Tokenizer,
+    tokenizer,
     inputs: Sequence[str],
     max_length: int = TEXT_MAX_LEN,
     add_bos: bool | None = None,
