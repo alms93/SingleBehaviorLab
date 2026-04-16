@@ -454,7 +454,9 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._interactive_timeline.segment_clicked.connect(self._on_interactive_segment_clicked)
         self._interactive_timeline.frame_clicked.connect(self._on_interactive_frame_clicked)
+        self._interactive_timeline.model_changed.connect(self._on_segments_edited)
         self._interactive_timeline.setVisible(False)
+        self._segments_model = None
         
         # Container for OvR multi-row: two scroll areas side by side with synced vertical scroll
         self._ovr_timeline_container = QWidget()
@@ -3221,16 +3223,17 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.set_model(model, colors)
     
     def _on_interactive_segment_clicked(self, seg_index: int):
-        if not hasattr(self, "_segments_model") or self._segments_model is None:
+        if not self._segments_model or seg_index < 0 or seg_index >= len(self._segments_model):
             return
-        if seg_index < 0 or seg_index >= len(self._segments_model):
-            return
-        seg = self._segments_model[seg_index]
-        seg_dict = seg.to_dict()
-        self._show_clip_popup(seg.start, frame_mode=True)
+        self._show_clip_popup(self._segments_model[seg_index].start, frame_mode=True)
 
     def _on_interactive_frame_clicked(self, frame_idx: int):
         self._show_clip_popup(frame_idx, frame_mode=True)
+
+    def _on_segments_edited(self):
+        if not self._segments_model:
+            return
+        self.aggregated_segments = self._segments_model.to_dicts()
 
     def _on_filter_changed(self, index: int):
         if self.predictions:
