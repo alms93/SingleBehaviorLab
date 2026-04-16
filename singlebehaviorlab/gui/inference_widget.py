@@ -307,6 +307,17 @@ class InferenceWidget(QWidget):
         self.filter_behavior_combo.addItem("All Behaviors")
         self.filter_behavior_combo.currentIndexChanged.connect(self._on_filter_changed)
         timeline_controls_layout.addWidget(self.filter_behavior_combo)
+        timeline_controls_layout.addWidget(QLabel("Cleanup:"))
+        self.cleanup_preset_combo = QComboBox()
+        self.cleanup_preset_combo.addItems(["None", "Light", "Standard", "Aggressive", "Custom"])
+        self.cleanup_preset_combo.setCurrentText("Custom")
+        self.cleanup_preset_combo.setToolTip(
+            "Quick post-processing preset. Sets smoothing, gap fill, min segment, and Viterbi.\n"
+            "Pick a preset or tweak individual settings (switches to 'Custom' automatically)."
+        )
+        self.cleanup_preset_combo.currentTextChanged.connect(self._on_cleanup_preset_changed)
+        timeline_controls_layout.addWidget(self.cleanup_preset_combo)
+
         self.use_ignore_threshold_check = QCheckBox("Ignore low-confidence")
         self.use_ignore_threshold_check.setChecked(self.use_ignore_threshold)
         self.use_ignore_threshold_check.stateChanged.connect(self._on_ignore_threshold_changed)
@@ -2111,6 +2122,9 @@ class InferenceWidget(QWidget):
         return [self._effective_prediction_for_clip(i) for i in range(len(self.predictions))]
 
     def _on_ignore_threshold_changed(self, *_args):
+        self.cleanup_preset_combo.blockSignals(True)
+        self.cleanup_preset_combo.setCurrentText("Custom")
+        self.cleanup_preset_combo.blockSignals(False)
         self.use_ignore_threshold = bool(self.use_ignore_threshold_check.isChecked())
         self.global_ignore_threshold = float(self.ignore_threshold_spin.value())
         self.config["inference_use_ignore_threshold"] = self.use_ignore_threshold
@@ -2139,7 +2153,79 @@ class InferenceWidget(QWidget):
                 "Reduces rapid frame-to-frame class switching without retraining."
             )
 
+    _CLEANUP_PRESETS = {
+        "None": {
+            "use_viterbi": False, "switch_penalty": 0.35,
+            "use_ignore": False, "threshold": 0.60,
+            "smooth_window": 1, "gap_fill": 0, "min_segment": 1,
+        },
+        "Light": {
+            "use_viterbi": False, "switch_penalty": 0.35,
+            "use_ignore": True, "threshold": 0.50,
+            "smooth_window": 3, "gap_fill": 2, "min_segment": 3,
+        },
+        "Standard": {
+            "use_viterbi": True, "switch_penalty": 0.35,
+            "use_ignore": True, "threshold": 0.55,
+            "smooth_window": 5, "gap_fill": 5, "min_segment": 8,
+        },
+        "Aggressive": {
+            "use_viterbi": True, "switch_penalty": 0.60,
+            "use_ignore": True, "threshold": 0.60,
+            "smooth_window": 11, "gap_fill": 10, "min_segment": 20,
+        },
+    }
+
+    def _on_cleanup_preset_changed(self, preset_name: str):
+        if preset_name == "Custom":
+            return
+        preset = self._CLEANUP_PRESETS.get(preset_name)
+        if not preset:
+            return
+
+        self.use_viterbi_check.blockSignals(True)
+        self.viterbi_switch_penalty_spin.blockSignals(True)
+        self.use_ignore_threshold_check.blockSignals(True)
+        self.ignore_threshold_spin.blockSignals(True)
+        try:
+            self.use_viterbi_check.setChecked(preset["use_viterbi"])
+            self.viterbi_switch_penalty_spin.setValue(preset["switch_penalty"])
+            self.use_ignore_threshold_check.setChecked(preset["use_ignore"])
+            self.ignore_threshold_spin.setValue(preset["threshold"])
+        finally:
+            self.use_viterbi_check.blockSignals(False)
+            self.viterbi_switch_penalty_spin.blockSignals(False)
+            self.use_ignore_threshold_check.blockSignals(False)
+            self.ignore_threshold_spin.blockSignals(False)
+
+        self.use_viterbi_decode = preset["use_viterbi"]
+        self.viterbi_switch_penalty = preset["switch_penalty"]
+        self.use_ignore_threshold = preset["use_ignore"]
+        self.global_ignore_threshold = preset["threshold"]
+        self._min_segment_frames = preset["min_segment"]
+        self._merge_gap_frames = preset["gap_fill"]
+        self._temporal_smoothing_window_frames = preset["smooth_window"]
+
+        for cls in self.classes:
+            self.class_min_segment_frames[cls] = preset["min_segment"]
+            self.class_merge_gap_frames[cls] = preset["gap_fill"]
+            self.class_smoothing_window_frames[cls] = preset["smooth_window"]
+
+        self.config["inference_use_viterbi_decode"] = self.use_viterbi_decode
+        self.config["inference_viterbi_switch_penalty"] = self.viterbi_switch_penalty
+        self.config["inference_use_ignore_threshold"] = self.use_ignore_threshold
+        self.config["inference_ignore_threshold"] = self.global_ignore_threshold
+        self._sync_per_class_segment_rule_config()
+        self._update_viterbi_ui_state()
+
+        if self.predictions and self.frame_aggregation_check.isChecked():
+            self._compute_aggregated_timeline()
+            self._display_results()
+
     def _on_viterbi_changed(self, *_args):
+        self.cleanup_preset_combo.blockSignals(True)
+        self.cleanup_preset_combo.setCurrentText("Custom")
+        self.cleanup_preset_combo.blockSignals(False)
         self.use_viterbi_decode = bool(self.use_viterbi_check.isChecked())
         self.viterbi_switch_penalty = float(self.viterbi_switch_penalty_spin.value())
         self.config["inference_use_viterbi_decode"] = self.use_viterbi_decode
