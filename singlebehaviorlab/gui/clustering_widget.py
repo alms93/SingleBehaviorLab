@@ -243,6 +243,14 @@ class ClusteringWidget(QWidget):
         )
         preprocess_layout.addWidget(self.subtract_video_mean_check)
 
+        self.temporal_derivative_check = QCheckBox("Temporal derivatives")
+        self.temporal_derivative_check.setToolTip(
+            "Replace each embedding with the difference to the previous clip.\n"
+            "Static appearance (lighting, background) cancels out; only\n"
+            "behavioral change is preserved. Best for discovering movement\n"
+            "patterns across different videos and animals."
+        )
+        preprocess_layout.addWidget(self.temporal_derivative_check)
 
         self.preprocess_btn = QPushButton("Apply preprocessing")
         self.preprocess_btn.clicked.connect(self.apply_preprocessing)
@@ -790,6 +798,36 @@ class ClusteringWidget(QWidget):
                                 X.loc[mask] -= X.loc[mask].mean(axis=0)
                         steps.append("video-mean-sub")
 
+            if self.temporal_derivative_check.isChecked() and self.metadata is not None:
+                group_col = None
+                for col in ("group", "video_id"):
+                    if col in self.metadata.columns:
+                        group_col = col
+                        break
+                snippet_col = "snippet" if "snippet" in self.metadata.columns else None
+                if group_col and snippet_col:
+                    delta_rows = []
+                    delta_index = []
+                    for grp in self.metadata[group_col].unique():
+                        grp_snippets = self.metadata.loc[
+                            self.metadata[group_col] == grp, snippet_col
+                        ].values
+                        grp_mask = X.index.isin(grp_snippets)
+                        grp_data = X.loc[grp_mask]
+                        if len(grp_data) < 2:
+                            continue
+                        vals = grp_data.values
+                        deltas = vals[1:] - vals[:-1]
+                        delta_rows.append(deltas)
+                        delta_index.extend(grp_data.index[1:].tolist())
+                    if delta_rows:
+                        X = pd.DataFrame(
+                            np.concatenate(delta_rows, axis=0),
+                            index=delta_index,
+                            columns=X.columns,
+                        )
+                        steps.append("temporal-deriv")
+
             norm_method = self.normalization_method.currentText()
             if norm_method == 'standard':
                 X_norm = StandardScaler().fit_transform(X)
@@ -801,7 +839,6 @@ class ClusteringWidget(QWidget):
                 X_norm = X.values if hasattr(X, 'values') else X
             if norm_method != 'none':
                 steps.append(norm_method)
-
 
             self.processed_data = pd.DataFrame(X_norm, index=X.index, columns=range(X_norm.shape[1]))
 

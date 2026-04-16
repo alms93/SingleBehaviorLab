@@ -30,6 +30,7 @@ class ClusteringParams:
     min_dist: float = 0.1
     normalization: str = "standard"
     subtract_video_mean: bool = False
+    temporal_derivative: bool = False
     leiden_resolution: float = 1.0
     leiden_k: int = 15
     min_cluster_size: int = 10
@@ -175,6 +176,29 @@ def run_clustering(
                 if mask.sum() > 1:
                     X.loc[mask] -= X.loc[mask].mean(axis=0)
             _log("Applied per-video mean subtraction")
+
+    if params.temporal_derivative and metadata_df is not None:
+        group_col = None
+        for col in ("group", "video_id"):
+            if col in metadata_df.columns:
+                group_col = col
+                break
+        snippet_col = "snippet" if "snippet" in metadata_df.columns else None
+        if group_col and snippet_col:
+            delta_rows = []
+            delta_index = []
+            for grp in metadata_df[group_col].unique():
+                grp_snippets = metadata_df.loc[metadata_df[group_col] == grp, snippet_col].values
+                grp_mask = X.index.isin(grp_snippets)
+                grp_data = X.loc[grp_mask]
+                if len(grp_data) < 2:
+                    continue
+                vals = grp_data.values
+                delta_rows.append(vals[1:] - vals[:-1])
+                delta_index.extend(grp_data.index[1:].tolist())
+            if delta_rows:
+                X = pd.DataFrame(np.concatenate(delta_rows, axis=0), index=delta_index, columns=X.columns)
+                _log(f"Applied temporal derivatives ({len(X)} samples)")
 
     processed = _normalize(X, params.normalization)
 
