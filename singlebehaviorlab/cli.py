@@ -178,6 +178,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--no-clahe", dest="clahe", action="store_false", default=None,
         help="Disable CLAHE contrast normalization.",
     )
+    register_parser.add_argument(
+        "--flip-invariant", action="store_true",
+        help="Average original + horizontally flipped embeddings to remove facing-direction bias. 2x extraction time.",
+    )
     _add_common_runtime_flags(register_parser)
 
     segment_parser = subparsers.add_parser(
@@ -347,6 +351,8 @@ def cmd_register(args: argparse.Namespace) -> int:
         params.target_fps = int(args.target_fps)
     if args.clahe is False:
         params.normalization_method = "None"
+    if args.flip_invariant:
+        params.flip_invariant = True
 
     bar = {"pbar": None}
 

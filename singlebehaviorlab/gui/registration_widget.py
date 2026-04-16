@@ -326,15 +326,16 @@ class EmbeddingExtractionWorker(QThread):
     error = pyqtSignal(str)
     log_message = pyqtSignal(str)
     
-    def __init__(self, clip_paths: list, output_dir: str, experiment_name: str = None, model_name: str = 'videoprism_public_v1_base', clip_frame_ranges: dict = None, append_to_existing: bool = False):
+    def __init__(self, clip_paths: list, output_dir: str, experiment_name: str = None, model_name: str = 'videoprism_public_v1_base', clip_frame_ranges: dict = None, append_to_existing: bool = False, flip_invariant: bool = False):
         super().__init__()
-        self.clip_paths = clip_paths  # List of clip paths (strings)
-        self.clip_frame_ranges = clip_frame_ranges or {}  # Dict mapping clip_path -> (start_frame, end_frame)
+        self.clip_paths = clip_paths
+        self.clip_frame_ranges = clip_frame_ranges or {}
         self.output_dir = output_dir
         self.experiment_name = experiment_name
         self.model_name = model_name
         self.should_stop = False
         self.append_to_existing = append_to_existing
+        self.flip_invariant = flip_invariant
     
     def stop(self):
         self.should_stop = True
@@ -606,16 +607,20 @@ class EmbeddingExtractionWorker(QThread):
             frames_tensor = frames_tensor.unsqueeze(0)
             
             with torch.no_grad():
-                # VideoPrism returns (B, T*N, D) where N = 16*16 = 256
-                tokens = backbone(frames_tensor)  # (1, T*256, D)
-                del frames_tensor  # Free input tensor immediately
-                
-                # Mean pool over all tokens to get single embedding vector
-                embedding = tokens.mean(dim=1).squeeze(0)  # (D,)
-                del tokens  # Free large token tensor
-            
+                tokens = backbone(frames_tensor)
+                embedding = tokens.mean(dim=1).squeeze(0)
+                del tokens
+                if self.flip_invariant:
+                    flipped = torch.flip(frames_tensor, dims=[-1])
+                    tokens_f = backbone(flipped)
+                    emb_f = tokens_f.mean(dim=1).squeeze(0)
+                    del tokens_f, flipped
+                    embedding = (embedding + emb_f) * 0.5
+                    del emb_f
+                del frames_tensor
+
             result = embedding.cpu().numpy()
-            del embedding  # Free GPU tensor
+            del embedding
             return result
             
         except Exception as e:
@@ -820,6 +825,16 @@ class RegistrationWidget(QWidget):
         
         self.output_dir_label = QLabel("Clips will be saved to experiment folder")
         output_layout.addWidget(self.output_dir_label)
+
+        self.flip_invariant_check = QCheckBox("Flip-invariant embeddings")
+        self.flip_invariant_check.setChecked(False)
+        self.flip_invariant_check.setToolTip(
+            "Run each clip through VideoPrism twice (original + horizontally flipped)\n"
+            "and average the embeddings. Removes sensitivity to the animal's facing\n"
+            "direction so left-facing and right-facing versions of the same behavior\n"
+            "cluster together. Doubles embedding extraction time."
+        )
+        output_layout.addWidget(self.flip_invariant_check)
 
         self.append_embeddings_check = QCheckBox("Append to existing embeddings if present")
         self.append_embeddings_check.setChecked(False)
@@ -1266,12 +1281,13 @@ class RegistrationWidget(QWidget):
         
         # Start extraction worker with frame ranges if available
         self.embedding_worker = EmbeddingExtractionWorker(
-            clip_paths, 
-            self.output_dir, 
+            clip_paths,
+            self.output_dir,
             experiment_name=experiment_name,
             model_name=model_name,
             clip_frame_ranges=self.clip_frame_ranges if hasattr(self, 'clip_frame_ranges') else None,
-            append_to_existing=self.append_embeddings_check.isChecked()
+            append_to_existing=self.append_embeddings_check.isChecked(),
+            flip_invariant=self.flip_invariant_check.isChecked(),
         )
         self.embedding_worker.progress.connect(self._on_embedding_progress)
         self.embedding_worker.finished.connect(self._on_embedding_finished)

@@ -40,6 +40,7 @@ class RegistrationParams:
     clip_length_frames: int = 16
     step_frames: Optional[int] = None
     backbone_model: str = "videoprism_public_v1_base"
+    flip_invariant: bool = False
     experiment_name: Optional[str] = None
 
     @property
@@ -71,6 +72,7 @@ def _extract_embedding(
     backbone: VideoPrismBackbone,
     frames: np.ndarray,
     target_size: int,
+    flip_invariant: bool = False,
 ) -> Optional[np.ndarray]:
     try:
         resized = np.array([cv2.resize(f, (target_size, target_size)) for f in frames])
@@ -79,6 +81,11 @@ def _extract_embedding(
         with torch.no_grad():
             tokens = backbone(tensor)
             embedding = tokens.mean(dim=1).squeeze(0).cpu().numpy()
+            if flip_invariant:
+                flipped = torch.flip(tensor, dims=[-1])
+                tokens_f = backbone(flipped)
+                emb_f = tokens_f.mean(dim=1).squeeze(0).cpu().numpy()
+                embedding = (embedding + emb_f) * 0.5
         return embedding.astype(np.float32)
     except Exception:
         return None
@@ -178,7 +185,7 @@ def run_registration(
         if frames is None or len(frames) == 0:
             _log(f"Skipping {os.path.basename(clip_path)}: no frames")
             continue
-        embedding = _extract_embedding(backbone, frames, params.target_size)
+        embedding = _extract_embedding(backbone, frames, params.target_size, params.flip_invariant)
         del frames
         if embedding is None:
             _log(f"Skipping {os.path.basename(clip_path)}: embedding failed")
