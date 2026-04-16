@@ -353,6 +353,8 @@ class EmbeddingExtractionWorker(QThread):
             
             embed_dim = backbone.get_embed_dim()
             self.log_message.emit(f"VideoPrism model loaded. Embedding dimension: {embed_dim}")
+            if self.flip_invariant:
+                self.log_message.emit("Flip-invariant mode: averaging original + horizontally flipped embeddings")
             
             feature_matrix = []
             metadata = []
