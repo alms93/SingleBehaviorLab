@@ -598,6 +598,7 @@ class InferenceWorker(QThread):
                         "orig_fps": video_orig_fps,
                         "frame_interval": video_frame_interval,
                         "aggregated_frame_probs": aggregated_frame_probs,
+                        "aggregated_frame_embs": aggregated_frame_embs,
                     }
                     if sample_ranges:
                         res_entry["sample_ranges"] = sample_ranges

@@ -320,6 +320,15 @@ class InferenceWidget(QWidget):
         self.timeline_theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         timeline_controls_layout.addWidget(self.timeline_theme_combo)
         
+        self.embedding_refine_check = QCheckBox("Embedding refinement")
+        self.embedding_refine_check.setToolTip(
+            "Use the model's internal frame embeddings to detect true behavior\n"
+            "boundaries and smooth predictions. More accurate than temporal\n"
+            "window smoothing because it knows what 'similar behavior' means."
+        )
+        self.embedding_refine_check.stateChanged.connect(self._on_embedding_refine_changed)
+        timeline_controls_layout.addWidget(self.embedding_refine_check)
+
         self._advanced_toggle = QPushButton("Advanced")
         self._advanced_toggle.setCheckable(True)
         self._advanced_toggle.setChecked(False)
@@ -2910,6 +2919,11 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.set_model(model, colors)
         self._minimap.set_model(model, colors)
     
+    def _on_embedding_refine_changed(self, *_args):
+        if self.predictions and self.frame_aggregation_check.isChecked():
+            self._build_timeline_segments()
+            self._display_results()
+
     def _toggle_advanced_controls(self, show: bool):
         for w in self._advanced_widgets:
             w.setVisible(show)
@@ -3247,9 +3261,19 @@ class InferenceWidget(QWidget):
                 if float(fs[fi, ci]) < thr:
                     frame_labels[fi] = -1
 
-        # Merge-gap and min-segment run ONCE as the final cleanup, after all
-        # other preprocessing (smoothing + threshold) is done.
         frame_labels = self._apply_gap_merge_and_min_seg(frame_labels, T)
+
+        if self.embedding_refine_check.isChecked():
+            frame_embs = None
+            if hasattr(self, 'video_path') and self.video_path and self.video_path in self.results_cache:
+                frame_embs = self.results_cache[self.video_path].get("aggregated_frame_embs")
+            if isinstance(frame_embs, np.ndarray) and frame_embs.shape[0] >= T:
+                from singlebehaviorlab.backend.embedding_refine import refine_with_embeddings
+                frame_conf = np.max(fs, axis=1)
+                frame_labels = refine_with_embeddings(
+                    frame_labels[:T], frame_embs[:T], frame_conf,
+                    min_segment_frames=max(3, self._min_segment_frames),
+                )
 
         segments = []
         cur_cls = int(frame_labels[0])
