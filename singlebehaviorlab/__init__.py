@@ -35,6 +35,7 @@ _PUBLIC_API = {
     "infer": ("singlebehaviorlab.backend.inference", "run_inference_on_video"),
     "train": ("singlebehaviorlab.backend.training_runner", "run_training_session"),
     "load_config": ("singlebehaviorlab.config", "load_config"),
+    "learn_behavior_features": ("singlebehaviorlab.backend.contrastive", "learn_behavior_features"),
     "load_demo": ("singlebehaviorlab.demo", "load_demo"),
     "DEMOS": ("singlebehaviorlab.demo", "DEMOS"),
 }

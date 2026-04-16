@@ -243,11 +243,20 @@ class ClusteringWidget(QWidget):
         )
         preprocess_layout.addWidget(self.subtract_video_mean_check)
 
+        self.learn_features_btn = QPushButton("Learn behavior features")
+        self.learn_features_btn.setToolTip(
+            "Train a contrastive projection on the loaded embeddings.\n"
+            "Clips close in time map nearby; clips far apart map far away.\n"
+            "Suppresses static visual factors and amplifies behavioral dynamics.\n"
+            "Replaces the current matrix with 128-dim projected embeddings."
+        )
+        self.learn_features_btn.clicked.connect(self._learn_behavior_features)
+        preprocess_layout.addWidget(self.learn_features_btn)
 
         self.preprocess_btn = QPushButton("Apply preprocessing")
         self.preprocess_btn.clicked.connect(self.apply_preprocessing)
         preprocess_layout.addWidget(self.preprocess_btn)
-        
+
         self.preprocess_status = QLabel("Ready")
         self.preprocess_status.setWordWrap(True)
         self.preprocess_status.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
@@ -751,8 +760,58 @@ class ClusteringWidget(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Load Error", f"Failed to load data: {e}")
 
+    def _learn_behavior_features(self):
+        if self.matrix_data is None:
+            QMessageBox.warning(self, "No data", "Load a feature matrix first.")
+            return
+        try:
+            import tempfile
+            from singlebehaviorlab.backend.contrastive import learn_behavior_features
+
+            self.preprocess_status.setText("Training contrastive projection...")
+            self.preprocess_status.setStyleSheet("color: blue;")
+            QApplication.processEvents()
+
+            with tempfile.NamedTemporaryFile(suffix="_matrix.npz", delete=False) as tmp_m:
+                tmp_matrix = tmp_m.name
+            tmp_metadata = tmp_matrix.replace("_matrix.npz", "_metadata.npz")
+            out_matrix = tmp_matrix.replace("_matrix.npz", "_proj_matrix.npz")
+
+            snippet_ids = np.array(self.matrix_data.columns.tolist())
+            feature_names = np.array(self.matrix_data.index.tolist())
+            np.savez_compressed(tmp_matrix, matrix=self.matrix_data.values, feature_names=feature_names, snippet_ids=snippet_ids)
+            if self.metadata is not None:
+                np.savez_compressed(tmp_metadata, metadata=self.metadata.values, columns=np.array(self.metadata.columns))
+            else:
+                tmp_metadata = None
+
+            log_lines = []
+            result = learn_behavior_features(
+                tmp_matrix,
+                out_matrix,
+                metadata_path=tmp_metadata,
+                log_fn=lambda msg: (log_lines.append(msg), self.preprocess_status.setText(msg), QApplication.processEvents()),
+            )
+
+            proj = np.load(result["matrix"], allow_pickle=True)
+            self.matrix_data = pd.DataFrame(proj["matrix"], index=proj["feature_names"], columns=proj["snippet_ids"])
+            self.processed_data = None
+            self.preprocess_status.setText(f"Learned behavior features (128-dim). Apply preprocessing to continue.")
+            self.preprocess_status.setStyleSheet("color: green;")
+
+            for f in [tmp_matrix, tmp_metadata, out_matrix, result.get("metadata")]:
+                if f and os.path.exists(f):
+                    try:
+                        os.unlink(f)
+                    except Exception:
+                        pass
+
+        except Exception as e:
+            self.preprocess_status.setText(f"Feature learning failed: {e}")
+            self.preprocess_status.setStyleSheet("color: red;")
+            QMessageBox.critical(self, "Error", f"Contrastive training failed:\n{e}")
+
     def apply_preprocessing(self):
-        """Apply normalization."""
         if self.matrix_data is None:
             return
             
