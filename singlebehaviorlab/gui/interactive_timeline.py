@@ -32,7 +32,9 @@ from singlebehaviorlab.backend.segments import SegmentsModel
 __all__ = ["InteractiveTimeline", "SegmentItem"]
 
 _EDGE_PX = 6
-_ROW_H = 80
+_LANE_H = 36
+_LANE_PAD = 2
+_LABEL_W = 90
 _TICK_H = 18
 _MIN_LABEL_W = 48
 
@@ -102,8 +104,8 @@ class InteractiveTimeline(QGraphicsView):
         self.setScene(self._scene)
         self.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.setMinimumHeight(_ROW_H + _TICK_H + 20)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.setMinimumHeight(180)
         self.setStyleSheet("background: #fafafa; border: 1px solid #bbb;")
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
@@ -117,6 +119,7 @@ class InteractiveTimeline(QGraphicsView):
         self._drag_idx: int = -1
         self._drag_origin: float = 0.0
         self._drag_start_frame: int = 0
+        self._drag_moved: bool = False
 
     def set_model(self, model: SegmentsModel, colors: list[QColor]) -> None:
         self._model = model
@@ -132,24 +135,40 @@ class InteractiveTimeline(QGraphicsView):
         self._filter_class = class_idx
         self._rebuild()
 
+    def _lane_y(self, class_idx: int) -> float:
+        if not self._model or class_idx < 0 or class_idx >= len(self._model.classes):
+            return 0.0
+        return class_idx * (_LANE_H + _LANE_PAD)
+
+    def _class_from_y(self, y: float) -> int:
+        if not self._model:
+            return -1
+        idx = int(y / (_LANE_H + _LANE_PAD))
+        return max(0, min(len(self._model.classes) - 1, idx))
+
     def _rebuild(self) -> None:
         self._scene.clear()
         self._items.clear()
         if not self._model:
             return
 
+        n_classes = len(self._model.classes)
         ppf = self._ppf
-        tw = max(200, self._model.total_frames * ppf)
-        scene_h = _ROW_H + _TICK_H + 10
+        tw = max(200, self._model.total_frames * ppf) + _LABEL_W
+        lanes_h = n_classes * (_LANE_H + _LANE_PAD)
+        scene_h = lanes_h + _TICK_H + 10
         self._scene.setSceneRect(0, 0, tw, scene_h)
 
+        self._draw_lane_backgrounds(n_classes, tw, lanes_h)
+
         for i, seg in enumerate(self._model.segments):
-            x = seg.start * ppf
+            x = _LABEL_W + seg.start * ppf
             w = max(1.0, seg.length * ppf)
+            y = self._lane_y(seg.class_idx)
 
             if seg.class_idx < 0:
                 label, color = "Filtered", QColor(180, 180, 180)
-            elif seg.class_idx < len(self._model.classes):
+            elif seg.class_idx < n_classes:
                 label = self._model.classes[seg.class_idx]
                 color = self._colors[seg.class_idx % len(self._colors)] if self._colors else QColor(100, 100, 200)
             else:
@@ -159,17 +178,39 @@ class InteractiveTimeline(QGraphicsView):
                     and seg.class_idx != self._filter_class):
                 color = QColor(235, 235, 235)
 
-            item = SegmentItem(i, x, 0, w, _ROW_H, seg.class_idx, color, label, seg.confidence)
+            item = SegmentItem(i, x, y, w, _LANE_H, seg.class_idx, color, label, seg.confidence)
             self._scene.addItem(item)
             self._items.append(item)
 
-        self._draw_time_axis(tw)
+        self._draw_time_axis(tw, lanes_h)
 
-    def _draw_time_axis(self, total_width):
+    def _draw_lane_backgrounds(self, n_classes, total_width, lanes_h):
+        label_font = QFont("Sans", 9)
+        for ci in range(n_classes):
+            y = self._lane_y(ci)
+            bg = QColor(245, 245, 245) if ci % 2 == 0 else QColor(252, 252, 252)
+            rect = self._scene.addRect(
+                _LABEL_W, y, total_width - _LABEL_W, _LANE_H,
+                QPen(Qt.PenStyle.NoPen), QBrush(bg),
+            )
+            rect.setZValue(-1)
+            color = self._colors[ci % len(self._colors)] if self._colors else QColor(100, 100, 200)
+            indicator = self._scene.addRect(
+                0, y + 2, 6, _LANE_H - 4,
+                QPen(Qt.PenStyle.NoPen), QBrush(color),
+            )
+            name = self._model.classes[ci] if ci < len(self._model.classes) else f"class {ci}"
+            txt = QGraphicsSimpleTextItem(name)
+            txt.setFont(label_font)
+            txt.setBrush(QBrush(QColor(40, 40, 40)))
+            txt.setPos(10, y + _LANE_H / 2 - 7)
+            self._scene.addItem(txt)
+
+    def _draw_time_axis(self, total_width, lanes_h):
         fps = (self._model.orig_fps or 30.0) if self._model else 30.0
         ppf = self._ppf
         pps = ppf * fps
-        y = _ROW_H + 2
+        y = lanes_h + 2
 
         if pps <= 0:
             return
@@ -184,8 +225,8 @@ class InteractiveTimeline(QGraphicsView):
         pen = QPen(QColor(120, 120, 120), 0.5)
         font = QFont("Sans", 7)
         while t <= total_sec:
-            px = t * pps
-            line = self._scene.addLine(px, _ROW_H, px, _ROW_H + 5, pen)
+            px = _LABEL_W + t * pps
+            line = self._scene.addLine(px, lanes_h, px, lanes_h + 5, pen)
             if interval >= 60:
                 m, s = divmod(int(t), 60)
                 lbl = f"{m}:{s:02d}"
@@ -201,7 +242,7 @@ class InteractiveTimeline(QGraphicsView):
     def _frame_at(self, scene_x: float) -> int:
         if self._ppf <= 0 or not self._model:
             return 0
-        return max(0, min(self._model.total_frames - 1, int(scene_x / self._ppf)))
+        return max(0, min(self._model.total_frames - 1, int((scene_x - _LABEL_W) / self._ppf)))
 
     def _item_at(self, pos) -> SegmentItem | None:
         scene_pos = self.mapToScene(pos)
@@ -225,6 +266,7 @@ class InteractiveTimeline(QGraphicsView):
 
         item = self._item_at(event.pos())
         if item and self._model:
+            self._drag_moved = False
             edge = _hit_edge(item.rect(), scene_pos.x())
             if edge:
                 self._drag_mode = edge
@@ -249,17 +291,29 @@ class InteractiveTimeline(QGraphicsView):
             scene_pos = self.mapToScene(event.pos())
             delta_px = scene_pos.x() - self._drag_origin
             delta_frames = int(delta_px / self._ppf) if self._ppf > 0 else 0
-            if delta_frames == 0:
-                return
 
             if self._drag_mode in ("left", "right"):
-                self._model.resize(self._drag_idx, self._drag_mode, delta_frames)
+                if delta_frames != 0:
+                    self._drag_moved = True
+                    self._model.resize(self._drag_idx, self._drag_mode, delta_frames)
+                    self._drag_origin = scene_pos.x()
+                    self._rebuild()
+                    self.model_changed.emit()
             elif self._drag_mode == "move":
-                self._model.move(self._drag_idx, delta_frames)
-
-            self._drag_origin = scene_pos.x()
-            self._rebuild()
-            self.model_changed.emit()
+                new_class = self._class_from_y(scene_pos.y())
+                seg = self._model[self._drag_idx]
+                changed = False
+                if new_class != seg.class_idx and 0 <= new_class < len(self._model.classes):
+                    self._model.reclass(self._drag_idx, new_class)
+                    changed = True
+                if delta_frames != 0:
+                    self._model.move(self._drag_idx, delta_frames)
+                    self._drag_origin = scene_pos.x()
+                    changed = True
+                if changed:
+                    self._drag_moved = True
+                    self._rebuild()
+                    self.model_changed.emit()
             return
 
         item = self._item_at(event.pos())
@@ -277,17 +331,14 @@ class InteractiveTimeline(QGraphicsView):
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if self._drag_mode and self._model and self._drag_idx >= 0:
-            item = None
-            for it in self._items:
-                if it.seg_index == self._drag_idx:
-                    item = it
-                    break
-            if item and event.button() == Qt.MouseButton.LeftButton:
-                if self._drag_mode not in ("left", "right", "move"):
-                    self.segment_clicked.emit(item.seg_index)
+            idx = self._drag_idx
+            moved = self._drag_moved
             self._drag_mode = None
             self._drag_idx = -1
+            self._drag_moved = False
             self.setCursor(Qt.CursorShape.ArrowCursor)
+            if not moved and event.button() == Qt.MouseButton.LeftButton:
+                self.segment_clicked.emit(idx)
             return
         super().mouseReleaseEvent(event)
 

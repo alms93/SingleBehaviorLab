@@ -455,7 +455,7 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.segment_clicked.connect(self._on_interactive_segment_clicked)
         self._interactive_timeline.frame_clicked.connect(self._on_interactive_frame_clicked)
         self._interactive_timeline.model_changed.connect(self._on_segments_edited)
-        self._interactive_timeline.setVisible(False)
+        self._interactive_timeline.setVisible(True)
         self._segments_model = None
         
         # Container for OvR multi-row: two scroll areas side by side with synced vertical scroll
@@ -2752,35 +2752,30 @@ class InferenceWidget(QWidget):
             and self._use_ovr
             and bool(self.clip_probabilities)
         )
-        self.timeline_scroll.setVisible(not ovr_rows)
-        self._ovr_timeline_container.setVisible(ovr_rows)
 
         frame_aggregation_enabled = self.frame_aggregation_check.isChecked()
 
-        # OvR per-class row timeline
-        if ovr_rows:
-            self._interactive_timeline.setVisible(False)
-            self.timeline_scroll.setVisible(False)
-            if frame_aggregation_enabled:
-                need_precise_recompute = (
-                    not self.aggregated_segments
-                    or not isinstance(self._aggregated_frame_scores_norm, np.ndarray)
-                    or int(self._aggregated_last_covered_frame) <= 0
-                )
-                if need_precise_recompute:
-                    self._compute_aggregated_timeline()
-            self._draw_ovr_multirow_timeline()
-            return
+        if ovr_rows and frame_aggregation_enabled:
+            need_precise_recompute = (
+                not self.aggregated_segments
+                or not isinstance(self._aggregated_frame_scores_norm, np.ndarray)
+                or int(self._aggregated_last_covered_frame) <= 0
+            )
+            if need_precise_recompute:
+                self._compute_aggregated_timeline()
 
-        # Frame-aggregated: use the interactive QGraphicsView timeline
         if frame_aggregation_enabled and self.aggregated_segments:
-            self._interactive_timeline.setVisible(True)
             self.timeline_scroll.setVisible(False)
+            self._ovr_timeline_container.setVisible(False)
             self._draw_frame_aggregated_timeline()
             return
 
-        # Clip-based: use the original pixmap timeline
-        self._interactive_timeline.setVisible(False)
+        self._ovr_timeline_container.setVisible(ovr_rows)
+        if ovr_rows:
+            self.timeline_scroll.setVisible(False)
+            self._draw_ovr_multirow_timeline()
+            return
+
         self.timeline_scroll.setVisible(True)
         
         # Original clip-based timeline drawing
