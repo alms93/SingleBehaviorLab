@@ -131,6 +131,8 @@ singlebehaviorlab segment --video /data/recording.mp4 \
 Run `singlebehaviorlab <command> --help` for the full flag list on each subcommand. The GUI-only steps (labeling, refinement review, cluster inspection) still require the graphical interface; the CLI covers the batch-processing steps where no human input is needed.
 
 > **Full CLI reference:** [**CLI.md**](CLI.md) — detailed per-command docs, file-format reference, Python API, and troubleshooting.
+>
+> **Notebook demos:** [**demo/**](demo/) — two Jupyter notebooks walking through behavior sequencing and segmentation/clustering end-to-end. Drop your own demo video + prompts into `demo/data/` and step through the cells.
 
 ---
 
