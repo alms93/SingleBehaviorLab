@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "singlebehaviorlab"
-version = "2.3.2"
-description = "Semi-automated behavioral video annotation, training, and analysis tool"
+version = "2.3.3"
+description = "Behavioral sequencing and phenotyping with lightweight task specific adaptation"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
@@ -43,7 +43,6 @@ dependencies = [
     "huggingface-hub",
     "sentencepiece",
     "absl-py",
-    "tensorflow-cpu",
 ]
 
 [project.urls]

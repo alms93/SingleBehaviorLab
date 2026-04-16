@@ -16,13 +16,10 @@
 
 import collections
 from collections.abc import Mapping, Sequence
-import io
-import os
 import string
 
 import jax
 import numpy as np
-from tensorflow.io import gfile
 
 
 def traverse_with_names(tree, with_inner_nodes=False):
@@ -106,13 +103,7 @@ def recover_tree(keys, values):
 def npload(fname):
   """Loads `fname` and returns an np.ndarray or dict thereof."""
   # Load the data; use local paths directly if possible:
-  if os.path.exists(fname):
-    loaded = np.load(fname, allow_pickle=False)
-  else:
-    # For other (remote) paths go via gfile+BytesIO as np.load requires seeks.
-    with gfile.GFile(fname, "rb") as f:
-      data = f.read()
-    loaded = np.load(io.BytesIO(data), allow_pickle=False)
+  loaded = np.load(fname, allow_pickle=False)
 
   # Support loading both single-array files (np.save) and zips (np.savez).
   if isinstance(loaded, np.ndarray):

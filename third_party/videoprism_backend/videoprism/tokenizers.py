@@ -17,9 +17,6 @@
 from collections.abc import Sequence
 from typing import Protocol
 
-import tensorflow as tf
-from tensorflow.io import gfile
-
 import sentencepiece
 
 SentencePieceProcessor = sentencepiece.SentencePieceProcessor
@@ -44,7 +41,7 @@ class Tokenizer(Protocol):
 
   def to_int_tf_op(
       self, text: str | Sequence[str], *, bos: bool = False, eos: bool = False
-  ) -> tf.Tensor | tf.RaggedTensor:
+  ):
     """Same as `to_int()`, but as TF ops to be used in data pipelines.
 
     Args:
@@ -55,6 +52,7 @@ class Tokenizer(Protocol):
     Returns:
       A tf.Tensor of tokens.
     """
+    import tensorflow as tf
 
   @property
   def pad_token(self) -> int:
@@ -82,7 +80,7 @@ class SentencePieceTokenizer(Tokenizer):
     Args:
       model_path: A path to load the SentencePiece model.
     """
-    with gfile.GFile(model_path, "rb") as f:
+    with open(model_path, "rb") as f:
       model_bytes = f.read()
 
     self._model = SentencePieceProcessor()
@@ -115,7 +113,7 @@ class SentencePieceTokenizer(Tokenizer):
 
   def to_int_tf_op(
       self, text: str | Sequence[str], *, bos: bool = False, eos: bool = False
-  ) -> tf.Tensor | tf.RaggedTensor:
+  ):
     """Same as `to_int()`, but as TF ops to be used in data pipelines.
 
     Args:

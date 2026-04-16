@@ -326,7 +326,7 @@ class EmbeddingExtractionWorker(QThread):
     error = pyqtSignal(str)
     log_message = pyqtSignal(str)
     
-    def __init__(self, clip_paths: list, output_dir: str, experiment_name: str = None, model_name: str = 'videoprism_public_v1_base', clip_frame_ranges: dict = None, append_to_existing: bool = False, flip_invariant: bool = False, align_orientation: bool = False, mask_path: str = None):
+    def __init__(self, clip_paths: list, output_dir: str, experiment_name: str = None, model_name: str = 'videoprism_public_v1_base', clip_frame_ranges: dict = None, append_to_existing: bool = False, flip_invariant: bool = False):
         super().__init__()
         self.clip_paths = clip_paths
         self.clip_frame_ranges = clip_frame_ranges or {}
@@ -336,8 +336,6 @@ class EmbeddingExtractionWorker(QThread):
         self.should_stop = False
         self.append_to_existing = append_to_existing
         self.flip_invariant = flip_invariant
-        self.align_orientation = align_orientation
-        self.mask_path = mask_path
     
     def stop(self):
         self.should_stop = True
@@ -1256,11 +1254,6 @@ class RegistrationWidget(QWidget):
         experiment_name = self.config.get("experiment_name", None)
         
         # Start extraction worker with frame ranges if available
-        mask_path = None
-        if self.align_orientation_check.isChecked() and self.video_mask_pairs:
-            mask_path = self.video_mask_pairs[0][1] if len(self.video_mask_pairs) > 0 else None
-            self.log_text.append(f"Align orientation: mask_path={mask_path}, pairs={len(self.video_mask_pairs)}, frame_ranges={len(self.clip_frame_ranges)}")
-
         self.embedding_worker = EmbeddingExtractionWorker(
             clip_paths,
             self.output_dir,
@@ -1269,8 +1262,6 @@ class RegistrationWidget(QWidget):
             clip_frame_ranges=self.clip_frame_ranges if hasattr(self, 'clip_frame_ranges') else None,
             append_to_existing=self.append_embeddings_check.isChecked(),
             flip_invariant=self.flip_invariant_check.isChecked(),
-            align_orientation=self.align_orientation_check.isChecked(),
-            mask_path=mask_path,
         )
         self.embedding_worker.progress.connect(self._on_embedding_progress)
         self.embedding_worker.finished.connect(self._on_embedding_finished)
