@@ -27,9 +27,11 @@ from PyQt6.QtWidgets import (
     QMenu,
 )
 
+from PyQt6.QtWidgets import QWidget
+
 from singlebehaviorlab.backend.segments import SegmentsModel
 
-__all__ = ["InteractiveTimeline", "SegmentItem"]
+__all__ = ["InteractiveTimeline", "SegmentItem", "TimelineMinimap"]
 
 _EDGE_PX = 6
 _LANE_H = 36
@@ -446,3 +448,102 @@ class InteractiveTimeline(QGraphicsView):
             event.accept()
         else:
             super().wheelEvent(event)
+
+    def scrollContentsBy(self, dx, dy):
+        super().scrollContentsBy(dx, dy)
+        if hasattr(self, "_minimap") and self._minimap is not None:
+            self._minimap.update()
+
+    def set_minimap(self, minimap: "TimelineMinimap"):
+        self._minimap = minimap
+
+
+_MINIMAP_H = 24
+
+
+class TimelineMinimap(QWidget):
+    """Thin overview strip for the full video. Click to scroll the main timeline."""
+
+    def __init__(self, timeline: InteractiveTimeline, parent=None):
+        super().__init__(parent)
+        self._tl = timeline
+        self._tl.set_minimap(self)
+        self._model: SegmentsModel | None = None
+        self._colors: list[QColor] = []
+        self.setFixedHeight(_MINIMAP_H)
+        self.setStyleSheet("background: #eee; border: 1px solid #ccc;")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def set_model(self, model: SegmentsModel, colors: list[QColor]):
+        self._model = model
+        self._colors = list(colors)
+        self.update()
+
+    def paintEvent(self, event):
+        from PyQt6.QtGui import QPainter
+        painter = QPainter(self)
+        w = self.width()
+        h = self.height()
+
+        if not self._model or self._model.total_frames <= 0:
+            painter.end()
+            return
+
+        total = self._model.total_frames
+        n_classes = len(self._model.classes)
+
+        if n_classes <= 1:
+            for seg in self._model.segments:
+                x0 = int(seg.start / total * w)
+                x1 = max(x0 + 1, int(seg.end / total * w))
+                ci = seg.class_idx
+                if 0 <= ci < len(self._colors):
+                    color = QColor(self._colors[ci])
+                    color.setAlpha(200)
+                else:
+                    color = QColor(180, 180, 180, 160)
+                painter.fillRect(x0, 0, x1 - x0, h, color)
+        else:
+            lane_h = max(2, h // n_classes)
+            for seg in self._model.segments:
+                ci = seg.class_idx
+                if ci < 0 or ci >= n_classes:
+                    continue
+                x0 = int(seg.start / total * w)
+                x1 = max(x0 + 1, int(seg.end / total * w))
+                y = ci * lane_h
+                color = QColor(self._colors[ci % len(self._colors)]) if self._colors else QColor(120, 120, 200)
+                color.setAlpha(200)
+                painter.fillRect(x0, y, x1 - x0, lane_h, color)
+
+        sb = self._tl.horizontalScrollBar()
+        scene_rect = self._tl._scene.sceneRect()
+        scene_w = scene_rect.width()
+        if scene_w > 0 and sb.maximum() > 0:
+            vp_w = self._tl.viewport().width()
+            vp_start_frac = sb.value() / scene_w
+            vp_end_frac = (sb.value() + vp_w) / scene_w
+            vx0 = int(vp_start_frac * w)
+            vx1 = int(vp_end_frac * w)
+            painter.fillRect(vx0, 0, max(2, vx1 - vx0), h, QColor(0, 0, 0, 40))
+            painter.setPen(QPen(QColor(0, 0, 0, 140), 1))
+            painter.drawRect(vx0, 0, max(2, vx1 - vx0) - 1, h - 1)
+
+        painter.end()
+
+    def mousePressEvent(self, event):
+        self._scroll_to(event.pos().x())
+
+    def mouseMoveEvent(self, event):
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self._scroll_to(event.pos().x())
+
+    def _scroll_to(self, px):
+        if not self._model or self._model.total_frames <= 0:
+            return
+        frac = max(0.0, min(1.0, px / max(1, self.width())))
+        scene_w = self._tl._scene.sceneRect().width()
+        vp_w = self._tl.viewport().width()
+        target = int(frac * scene_w - vp_w / 2)
+        self._tl.horizontalScrollBar().setValue(max(0, target))
+        self.update()

@@ -438,9 +438,10 @@ class InferenceWidget(QWidget):
         timeline_controls_scroll.setMinimumHeight(48)
         timeline_controls_scroll.setMaximumHeight(62)
         
-        from singlebehaviorlab.gui.interactive_timeline import InteractiveTimeline
+        from singlebehaviorlab.gui.interactive_timeline import InteractiveTimeline, TimelineMinimap
         self._interactive_timeline = InteractiveTimeline()
         self._interactive_timeline.setMinimumHeight(180)
+        self._minimap = TimelineMinimap(self._interactive_timeline)
         self._interactive_timeline.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._interactive_timeline.segment_clicked.connect(self._on_interactive_segment_clicked)
         self._interactive_timeline.frame_clicked.connect(self._on_interactive_frame_clicked)
@@ -450,6 +451,7 @@ class InferenceWidget(QWidget):
         self._toggle_advanced_controls(False)
 
         timeline_group_layout.addWidget(timeline_controls_scroll)
+        timeline_group_layout.addWidget(self._minimap)
         timeline_group_layout.addWidget(self._interactive_timeline, 1)
         timeline_preset_row = QHBoxLayout()
         timeline_preset_row.addStretch()
@@ -2906,6 +2908,7 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.set_zoom(ppf)
         self._interactive_timeline.set_filter(filter_idx)
         self._interactive_timeline.set_model(model, colors)
+        self._minimap.set_model(model, colors)
     
     def _toggle_advanced_controls(self, show: bool):
         for w in self._advanced_widgets:
@@ -2947,6 +2950,7 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.set_zoom(ppf)
         self._interactive_timeline.set_filter(None)
         self._interactive_timeline.set_model(model, colors)
+        self._minimap.set_model(model, colors)
 
     def _on_filter_changed(self, index: int):
         if self.predictions:
