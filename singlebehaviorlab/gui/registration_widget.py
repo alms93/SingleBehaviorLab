@@ -326,7 +326,7 @@ class EmbeddingExtractionWorker(QThread):
     error = pyqtSignal(str)
     log_message = pyqtSignal(str)
     
-    def __init__(self, clip_paths: list, output_dir: str, experiment_name: str = None, model_name: str = 'videoprism_public_v1_base', clip_frame_ranges: dict = None, append_to_existing: bool = False, flip_invariant: bool = False):
+    def __init__(self, clip_paths: list, output_dir: str, experiment_name: str = None, model_name: str = 'videoprism_public_v1_base', clip_frame_ranges: dict = None, append_to_existing: bool = False, flip_invariant: bool = False, align_orientation: bool = False, mask_path: str = None):
         super().__init__()
         self.clip_paths = clip_paths
         self.clip_frame_ranges = clip_frame_ranges or {}
@@ -336,6 +336,8 @@ class EmbeddingExtractionWorker(QThread):
         self.should_stop = False
         self.append_to_existing = append_to_existing
         self.flip_invariant = flip_invariant
+        self.align_orientation = align_orientation
+        self.mask_path = mask_path
     
     def stop(self):
         self.should_stop = True
@@ -355,6 +357,8 @@ class EmbeddingExtractionWorker(QThread):
             self.log_message.emit(f"VideoPrism model loaded. Embedding dimension: {embed_dim}")
             if self.flip_invariant:
                 self.log_message.emit("Flip-invariant mode: averaging 4 orientations (original, hflip, vflip, both)")
+            if self.align_orientation:
+                self.log_message.emit("Orientation alignment: rotating clips to align body axis horizontally (mask PCA)")
             
             feature_matrix = []
             metadata = []
@@ -375,10 +379,15 @@ class EmbeddingExtractionWorker(QThread):
                     self.log_message.emit(f"Warning: Could not load frames from {clip_name}, skipping")
                     continue
                 
-                # Extract embedding
-                embedding = self._extract_embedding(backbone, frames)
-                
-                # Free frames memory immediately after use
+                rot_angle = 0.0
+                if self.align_orientation and self.mask_path:
+                    start_f = self.clip_frame_ranges.get(clip_path, (None, None))[0] if clip_path in self.clip_frame_ranges else None
+                    end_f = self.clip_frame_ranges.get(clip_path, (None, None))[1] if clip_path in self.clip_frame_ranges else None
+                    if start_f is not None and end_f is not None:
+                        from singlebehaviorlab.backend.registration import _compute_mask_angle
+                        rot_angle = _compute_mask_angle(self.mask_path, int(start_f), int(end_f))
+
+                embedding = self._extract_embedding(backbone, frames, rot_angle)
                 del frames
                 
                 if embedding is None:
@@ -568,26 +577,22 @@ class EmbeddingExtractionWorker(QThread):
         cap.release()
         return np.array(frames) if frames else None
     
-    def _extract_embedding(self, backbone: VideoPrismBackbone, frames: np.ndarray) -> np.ndarray:
-        """Extract mean-pooled VideoPrism embedding from frames."""
+    def _extract_embedding(self, backbone: VideoPrismBackbone, frames: np.ndarray, rotation_angle: float = 0.0) -> np.ndarray:
         try:
-            # Resize frames to 288x288 (VideoPrism expects this)
             target_size = 288
+            if abs(rotation_angle) >= 2.0:
+                from singlebehaviorlab.backend.registration import _rotate_frames
+                frames = _rotate_frames(frames, rotation_angle)
             processed_frames = []
             for frame in frames:
                 resized = cv2.resize(frame, (target_size, target_size))
                 processed_frames.append(resized)
             frames_resized = np.array(processed_frames)
-            del processed_frames  # Free list memory
-            
-            # Convert to PyTorch format: (T, C, H, W) and normalize to [0, 1]
-            frames_t = np.transpose(frames_resized, (0, 3, 1, 2))  # (T, C, H, W)
-            del frames_resized  # Free numpy array
-            
+            del processed_frames
+            frames_t = np.transpose(frames_resized, (0, 3, 1, 2))
+            del frames_resized
             frames_tensor = torch.from_numpy(frames_t).float() / 255.0
-            del frames_t  # Free numpy array
-            
-            # Add batch dimension: (1, T, C, H, W)
+            del frames_t
             frames_tensor = frames_tensor.unsqueeze(0)
             
             with torch.no_grad():
@@ -1273,6 +1278,10 @@ class RegistrationWidget(QWidget):
         experiment_name = self.config.get("experiment_name", None)
         
         # Start extraction worker with frame ranges if available
+        mask_path = None
+        if self.align_orientation_check.isChecked() and self.video_mask_pairs:
+            mask_path = self.video_mask_pairs[0][1] if len(self.video_mask_pairs) > 0 else None
+
         self.embedding_worker = EmbeddingExtractionWorker(
             clip_paths,
             self.output_dir,
@@ -1281,6 +1290,8 @@ class RegistrationWidget(QWidget):
             clip_frame_ranges=self.clip_frame_ranges if hasattr(self, 'clip_frame_ranges') else None,
             append_to_existing=self.append_embeddings_check.isChecked(),
             flip_invariant=self.flip_invariant_check.isChecked(),
+            align_orientation=self.align_orientation_check.isChecked(),
+            mask_path=mask_path,
         )
         self.embedding_worker.progress.connect(self._on_embedding_progress)
         self.embedding_worker.finished.connect(self._on_embedding_finished)
