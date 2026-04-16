@@ -357,8 +357,6 @@ class EmbeddingExtractionWorker(QThread):
             self.log_message.emit(f"VideoPrism model loaded. Embedding dimension: {embed_dim}")
             if self.flip_invariant:
                 self.log_message.emit("Flip-invariant mode: averaging 4 orientations (original, hflip, vflip, both)")
-            if self.align_orientation:
-                self.log_message.emit("Orientation alignment: rotating clips to align body axis horizontally (mask PCA)")
             
             feature_matrix = []
             metadata = []
