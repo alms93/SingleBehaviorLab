@@ -323,11 +323,23 @@ class InferenceWidget(QWidget):
         self.embedding_refine_check = QCheckBox("Embedding refinement")
         self.embedding_refine_check.setToolTip(
             "Use the model's internal frame embeddings to detect true behavior\n"
-            "boundaries and smooth predictions. More accurate than temporal\n"
-            "window smoothing because it knows what 'similar behavior' means."
+            "boundaries and correct predictions via label propagation."
         )
         self.embedding_refine_check.stateChanged.connect(self._on_embedding_refine_changed)
         timeline_controls_layout.addWidget(self.embedding_refine_check)
+
+        self.embedding_refine_threshold = QDoubleSpinBox()
+        self.embedding_refine_threshold.setRange(0.1, 0.99)
+        self.embedding_refine_threshold.setSingleStep(0.05)
+        self.embedding_refine_threshold.setValue(0.70)
+        self.embedding_refine_threshold.setToolTip(
+            "Confidence threshold for embedding refinement.\n"
+            "Frames above this are trusted as seed labels.\n"
+            "Frames below defer to their embedding neighbors.\n"
+            "Lower = more aggressive correction."
+        )
+        self.embedding_refine_threshold.valueChanged.connect(self._on_embedding_refine_changed)
+        timeline_controls_layout.addWidget(self.embedding_refine_threshold)
 
         self._advanced_toggle = QPushButton("Advanced")
         self._advanced_toggle.setCheckable(True)
@@ -3274,6 +3286,7 @@ class InferenceWidget(QWidget):
                     frame_labels[:T], frame_embs[:T], frame_conf,
                     n_classes=C,
                     min_segment_frames=max(3, self._min_segment_frames),
+                    confidence_threshold=float(self.embedding_refine_threshold.value()),
                 )
 
         segments = []
