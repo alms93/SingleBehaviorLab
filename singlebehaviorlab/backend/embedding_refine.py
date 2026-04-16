@@ -1,8 +1,10 @@
 """Embedding-based timeline refinement.
 
-Uses the per-frame embeddings produced during inference to detect true
-behavior boundaries (cosine-distance spikes) and smooth predictions
-within each segment by majority vote over the embedding neighborhood.
+Uses per-frame embeddings from the inference model to:
+1. Cluster frames by behavioral similarity (k-means)
+2. Correct misclassified frames using cluster consensus
+3. Detect true behavior boundaries via embedding distance spikes
+4. Smooth and rebuild segments
 """
 
 from __future__ import annotations
@@ -48,47 +50,102 @@ def _majority_label(labels: np.ndarray, weights: Optional[np.ndarray] = None) ->
     return int(vals[np.argmax(cnts)])
 
 
+def _cluster_correction(
+    frame_labels: np.ndarray,
+    frame_embeddings: np.ndarray,
+    frame_confidences: np.ndarray,
+    n_classes: int,
+    confidence_threshold: float = 0.7,
+) -> np.ndarray:
+    from sklearn.cluster import MiniBatchKMeans
+
+    n_frames = len(frame_labels)
+    n_clusters = min(n_classes * 3, max(n_classes, n_frames // 50))
+    n_clusters = max(2, min(n_clusters, n_frames - 1))
+
+    kmeans = MiniBatchKMeans(n_clusters=n_clusters, random_state=42, batch_size=min(1024, n_frames))
+    cluster_ids = kmeans.fit_predict(frame_embeddings)
+
+    cluster_dominant_class: dict[int, int] = {}
+    for ci in range(n_clusters):
+        mask = cluster_ids == ci
+        if not np.any(mask):
+            continue
+        cluster_dominant_class[ci] = _majority_label(
+            frame_labels[mask], frame_confidences[mask]
+        )
+
+    corrected = frame_labels.copy()
+    for fi in range(n_frames):
+        if corrected[fi] < 0:
+            continue
+        ci = cluster_ids[fi]
+        dominant = cluster_dominant_class.get(ci, -1)
+        if dominant < 0:
+            continue
+        if frame_confidences[fi] < confidence_threshold and corrected[fi] != dominant:
+            corrected[fi] = dominant
+
+    return corrected
+
+
 def refine_with_embeddings(
     frame_labels: np.ndarray,
     frame_embeddings: np.ndarray,
     frame_confidences: Optional[np.ndarray] = None,
+    n_classes: int = 0,
     boundary_sensitivity: float = 1.5,
     min_segment_frames: int = 3,
+    confidence_threshold: float = 0.7,
 ) -> np.ndarray:
-    """Refine per-frame predictions using embedding similarity.
+    """Refine per-frame predictions using embedding clustering and boundary detection.
 
     Args:
         frame_labels: (N,) int array of per-frame class indices (-1 = unlabeled).
         frame_embeddings: (N, D) float array of per-frame embeddings.
-        frame_confidences: optional (N,) confidence scores used as weights.
-        boundary_sensitivity: lower values detect more boundaries (default 1.5).
+        frame_confidences: optional (N,) confidence scores.
+        n_classes: number of behavior classes (used to size the clustering).
+        boundary_sensitivity: lower values detect more boundaries.
         min_segment_frames: segments shorter than this are merged with neighbors.
+        confidence_threshold: frames below this confidence defer to cluster consensus.
 
     Returns:
         (N,) int array of refined per-frame labels.
     """
     n_frames = len(frame_labels)
-    if n_frames == 0 or frame_embeddings.shape[0] != n_frames:
+    if n_frames < 4 or frame_embeddings.shape[0] != n_frames:
         return frame_labels.copy()
 
+    if frame_confidences is None:
+        frame_confidences = np.ones(n_frames, dtype=np.float32)
+
+    if n_classes <= 0:
+        n_classes = max(1, int(frame_labels.max()) + 1)
+
+    # Step 1: cluster-based correction of misclassified frames
+    corrected = _cluster_correction(
+        frame_labels, frame_embeddings, frame_confidences,
+        n_classes, confidence_threshold,
+    )
+
+    # Step 2: boundary detection from embedding distances
     distances = _cosine_distance_adjacent(frame_embeddings)
     boundaries = _detect_boundaries(distances, boundary_sensitivity)
     boundaries.append(n_frames)
 
-    refined = frame_labels.copy()
+    # Step 3: within each boundary segment, assign majority class
+    refined = corrected.copy()
     segments: list[tuple[int, int]] = []
     for i in range(len(boundaries) - 1):
         start = boundaries[i]
         end = boundaries[i + 1]
         if end <= start:
             continue
-        seg_labels = frame_labels[start:end]
-        seg_weights = frame_confidences[start:end] if frame_confidences is not None else None
-        majority = _majority_label(seg_labels, seg_weights)
+        majority = _majority_label(corrected[start:end], frame_confidences[start:end])
         refined[start:end] = majority
         segments.append((start, end))
 
-    # Merge short segments with the more similar neighbor
+    # Step 4: merge short segments with the most similar neighbor
     changed = True
     while changed:
         changed = False
@@ -98,7 +155,8 @@ def refine_with_embeddings(
             start, end = segments[i]
             if (end - start) < min_segment_frames and len(segments) > 1:
                 mean_emb = frame_embeddings[start:end].mean(axis=0)
-                mean_emb /= max(np.linalg.norm(mean_emb), 1e-8)
+                norm = max(np.linalg.norm(mean_emb), 1e-8)
+                mean_emb /= norm
                 best_sim = -1.0
                 merge_with = -1
                 for j in [i - 1, i + 1]:
@@ -115,8 +173,8 @@ def refine_with_embeddings(
                     merged_start = min(start, ms)
                     merged_end = max(end, me)
                     majority = _majority_label(
-                        frame_labels[merged_start:merged_end],
-                        frame_confidences[merged_start:merged_end] if frame_confidences is not None else None,
+                        corrected[merged_start:merged_end],
+                        frame_confidences[merged_start:merged_end],
                     )
                     refined[merged_start:merged_end] = majority
                     if merge_with < i:

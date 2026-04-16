@@ -3272,6 +3272,7 @@ class InferenceWidget(QWidget):
                 frame_conf = np.max(fs, axis=1)
                 frame_labels = refine_with_embeddings(
                     frame_labels[:T], frame_embs[:T], frame_conf,
+                    n_classes=C,
                     min_segment_frames=max(3, self._min_segment_frames),
                 )
 
