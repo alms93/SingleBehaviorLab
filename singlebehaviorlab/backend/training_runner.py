@@ -120,7 +120,7 @@ def _build_backend_train_config(
         "crop_jitter_strength": float(cfg.get("crop_jitter_strength", 0.15)),
         "emb_aug_versions": int(cfg.get("emb_aug_versions", 1)),
         "clip_length": int(cfg.get("clip_length", 16)),
-        "use_ovr": bool(cfg.get("use_ovr", False)),
+        "use_ovr": bool(cfg.get("use_ovr", True)),
         "ovr_label_smoothing": float(cfg.get("ovr_label_smoothing", 0.05)),
         "use_asl": bool(cfg.get("use_asl", False)),
         "asl_gamma_neg": float(cfg.get("asl_gamma_neg", 2.0)),

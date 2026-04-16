@@ -336,7 +336,7 @@ def load_pretrained_weights(
 
 
 def load_text_tokenizer(name: str):
-  from videoprism import tokenizers  # lazy: avoids top-level TF dependency
+  from videoprism import tokenizers
   """Loads a text tokenizer by name.
 
   Args:

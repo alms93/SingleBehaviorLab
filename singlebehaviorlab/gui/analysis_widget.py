@@ -842,7 +842,7 @@ class AnalysisWidget(QWidget):
                     if i < len(clip_starts):
                         end_frame_exclusive = int(clip_starts[i])
                     else:
-                        end_frame_exclusive = start_frame + (clip_length * frame_interval)
+                        end_frame_exclusive = start_frame + (clip_length - 1) * frame_interval + 1
                         if total_frames > 0:
                             end_frame_exclusive = min(end_frame_exclusive, total_frames)
                     duration_frames = max(0, end_frame_exclusive - start_frame)

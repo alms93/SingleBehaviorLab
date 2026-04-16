@@ -2143,15 +2143,8 @@ class TrainingWidget(QWidget):
         config_layout = QFormLayout()
 
         self.use_ovr_check = QCheckBox("One-vs-Rest heads (OvR)")
-        self.use_ovr_check.setToolTip(
-            "Train independent binary heads per class instead of shared softmax.\n"
-            "Better when 'other'/background is heterogeneous.\n"
-            "near_negative_* clips automatically suppress their matched class.\n"
-            "At inference: sigmoid scores + per-class threshold → Ignore if all low."
-        )
-        self.use_ovr_check.setChecked(False)
-        self.use_ovr_check.stateChanged.connect(self._on_ovr_toggled)
-        config_layout.addRow("", self.use_ovr_check)
+        self.use_ovr_check.setChecked(True)
+        self.use_ovr_check.setVisible(False)
 
         self.ovr_background_negative_check = QCheckBox("Treat Other/background as OvR negatives")
         self.ovr_background_negative_check.setToolTip(
@@ -2325,6 +2318,8 @@ class TrainingWidget(QWidget):
         config_layout.addRow("", self.use_weighted_sampler_check)
 
         ovr_group.setLayout(config_layout)
+        self.use_ovr_check.stateChanged.connect(self._on_ovr_toggled)
+        self._on_ovr_toggled(0)
 
         # --- Augmentation & Data ---
         data_group = QGroupBox("Augmentation && Data")
@@ -3263,7 +3258,7 @@ class TrainingWidget(QWidget):
             if "crop_jitter_strength" in config:
                 self.crop_jitter_strength_spin.setValue(float(config["crop_jitter_strength"]))
 
-            if "use_ovr" in config: self.use_ovr_check.setChecked(config["use_ovr"])
+            self.use_ovr_check.setChecked(True)
             if "ovr_background_as_negative" in config:
                 self.ovr_background_negative_check.setChecked(bool(config["ovr_background_as_negative"]))
             if "ovr_pos_weight_f1_excluded" in config:

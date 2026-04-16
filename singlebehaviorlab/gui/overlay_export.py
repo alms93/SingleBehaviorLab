@@ -715,7 +715,7 @@ def run_export_single_overlay(widget, output_path, opts, sample_label=None):
                     if clip_idx + 1 < len(clip_starts):
                         end_exclusive = int(clip_starts[clip_idx + 1])
                     else:
-                        end_exclusive = start_f + (clip_length * frame_interval)
+                        end_exclusive = start_f + (clip_length - 1) * frame_interval + 1
                     if start_f <= frame_idx < end_exclusive:
                         pred_idx = int(widget._effective_prediction_for_clip(clip_idx))
                         conf = (
@@ -767,7 +767,7 @@ def run_export_single_overlay(widget, output_path, opts, sample_label=None):
                     for ci in range(len(widget.clip_starts)):
                         cs = int(widget.clip_starts[ci])
                         end_c = (
-                            cs + (clip_length * frame_interval)
+                            cs + (clip_length - 1) * frame_interval + 1
                             if ci + 1 >= len(widget.clip_starts)
                             else int(widget.clip_starts[ci + 1])
                         )

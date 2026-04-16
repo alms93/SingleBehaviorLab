@@ -305,7 +305,7 @@ def export_attention_heatmap_video(widget):
 def _find_clip_for_frame(frame_idx, clip_starts, clip_length, frame_interval):
     """Find which clip index covers the given video frame."""
     for i in range(len(clip_starts) - 1, -1, -1):
-        clip_end = clip_starts[i] + clip_length * frame_interval
+        clip_end = clip_starts[i] + (clip_length - 1) * frame_interval + 1
         if clip_starts[i] <= frame_idx < clip_end:
             return i
     return None

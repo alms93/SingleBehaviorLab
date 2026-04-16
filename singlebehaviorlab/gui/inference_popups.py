@@ -2,7 +2,8 @@
 
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QComboBox,
-    QGroupBox, QMessageBox, QSizePolicy, QSpinBox,
+    QGroupBox, QMessageBox, QSizePolicy, QSpinBox, QCheckBox,
+    QDoubleSpinBox, QFormLayout,
 )
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QImage, QPixmap
@@ -949,3 +950,139 @@ class FrameSegmentPopupDialog(QDialog):
         if hasattr(self, '_play_timer') and self._play_timer.isActive():
             self._play_timer.stop()
         super().closeEvent(event)
+
+
+class PostprocessingDialog(QDialog):
+    """Settings dialog for inference postprocessing controls."""
+
+    def __init__(self, parent_widget):
+        super().__init__(parent_widget)
+        self.setWindowTitle("Postprocessing Settings")
+        self.setMinimumWidth(420)
+        self._w = parent_widget
+        layout = QVBoxLayout(self)
+
+        # --- Basic ---
+        basic = QGroupBox("Basic")
+        bl = QVBoxLayout()
+
+        ref_row = QHBoxLayout()
+        self._embed_refine = QCheckBox("Embedding refinement")
+        self._embed_refine.setToolTip(
+            "Use the model's internal frame embeddings to detect true behavior\n"
+            "boundaries and correct predictions via label propagation."
+        )
+        ref_row.addWidget(self._embed_refine)
+        ref_row.addWidget(QLabel("Confidence:"))
+        self._embed_refine_thresh = QDoubleSpinBox()
+        self._embed_refine_thresh.setRange(0.1, 0.99)
+        self._embed_refine_thresh.setSingleStep(0.05)
+        ref_row.addWidget(self._embed_refine_thresh)
+        bl.addLayout(ref_row)
+
+        self._show_all = QCheckBox("Show all classes (overlapping)")
+        self._show_all.setToolTip(
+            "When enabled, every class above its threshold is shown independently\n"
+            "(no mutual exclusivity). When disabled, only the top-1 class is shown."
+        )
+        bl.addWidget(self._show_all)
+
+        self._show_per_clip = QCheckBox("Show per clip")
+        self._show_per_clip.setToolTip(
+            "Show raw per-clip predictions instead of frame-aggregated segments.\n"
+            "Useful for visually verifying individual clip boundaries and predictions."
+        )
+        bl.addWidget(self._show_per_clip)
+
+        basic.setLayout(bl)
+        layout.addWidget(basic)
+
+        # --- Thresholds ---
+        thresh = QGroupBox("Thresholds")
+        tl = QVBoxLayout()
+        thr_row = QHBoxLayout()
+        self._ignore_low = QCheckBox("Ignore low-confidence")
+        thr_row.addWidget(self._ignore_low)
+        thr_row.addWidget(QLabel("Default τ:"))
+        self._ignore_spin = QDoubleSpinBox()
+        self._ignore_spin.setDecimals(2)
+        self._ignore_spin.setRange(0.0, 1.0)
+        self._ignore_spin.setSingleStep(0.05)
+        thr_row.addWidget(self._ignore_spin)
+        self._per_class_thresh_btn = QPushButton("Per-class τ…")
+        self._per_class_thresh_btn.clicked.connect(
+            lambda: self._w._open_per_class_thresholds_dialog()
+        )
+        thr_row.addWidget(self._per_class_thresh_btn)
+        tl.addLayout(thr_row)
+        thresh.setLayout(tl)
+        layout.addWidget(thresh)
+
+        # --- Decoding ---
+        dec = QGroupBox("Decoding")
+        dl = QVBoxLayout()
+        vit_row = QHBoxLayout()
+        self._viterbi = QCheckBox("Viterbi decode")
+        self._viterbi.setToolTip(
+            "Inference-only sequence decoding on merged frame probabilities.\n"
+            "OvR models use binary per-class Viterbi."
+        )
+        vit_row.addWidget(self._viterbi)
+        vit_row.addWidget(QLabel("Switch penalty:"))
+        self._viterbi_penalty = QDoubleSpinBox()
+        self._viterbi_penalty.setDecimals(2)
+        self._viterbi_penalty.setRange(0.0, 5.0)
+        self._viterbi_penalty.setSingleStep(0.05)
+        vit_row.addWidget(self._viterbi_penalty)
+        dl.addLayout(vit_row)
+        dec.setLayout(dl)
+        layout.addWidget(dec)
+
+        # --- Cleanup ---
+        cleanup = QGroupBox("Cleanup")
+        cl = QVBoxLayout()
+        self._per_class_seg_btn = QPushButton("Per-class segment rules…")
+        self._per_class_seg_btn.setToolTip(
+            "Set smooth window, gap fill, and minimum segment length per behavior class."
+        )
+        self._per_class_seg_btn.clicked.connect(
+            lambda: self._w._open_per_class_segment_rules_dialog()
+        )
+        cl.addWidget(self._per_class_seg_btn)
+        cleanup.setLayout(cl)
+        layout.addWidget(cleanup)
+
+        # --- Buttons ---
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        apply_btn = QPushButton("Apply")
+        apply_btn.clicked.connect(self._apply)
+        btn_row.addWidget(apply_btn)
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.close)
+        btn_row.addWidget(close_btn)
+        layout.addLayout(btn_row)
+
+        self._load_from_widget()
+
+    def _load_from_widget(self):
+        w = self._w
+        self._embed_refine.setChecked(w.embedding_refine_check.isChecked())
+        self._embed_refine_thresh.setValue(w.embedding_refine_threshold.value())
+        self._show_all.setChecked(w.ovr_show_all_check.isChecked())
+        self._show_per_clip.setChecked(not w.frame_aggregation_check.isChecked())
+        self._ignore_low.setChecked(w.use_ignore_threshold_check.isChecked())
+        self._ignore_spin.setValue(w.ignore_threshold_spin.value())
+        self._viterbi.setChecked(w.use_viterbi_check.isChecked())
+        self._viterbi_penalty.setValue(w.viterbi_switch_penalty_spin.value())
+
+    def _apply(self):
+        w = self._w
+        w.embedding_refine_check.setChecked(self._embed_refine.isChecked())
+        w.embedding_refine_threshold.setValue(self._embed_refine_thresh.value())
+        w.ovr_show_all_check.setChecked(self._show_all.isChecked())
+        w.frame_aggregation_check.setChecked(not self._show_per_clip.isChecked())
+        w.use_ignore_threshold_check.setChecked(self._ignore_low.isChecked())
+        w.ignore_threshold_spin.setValue(self._ignore_spin.value())
+        w.use_viterbi_check.setChecked(self._viterbi.isChecked())
+        w.viterbi_switch_penalty_spin.setValue(self._viterbi_penalty.value())

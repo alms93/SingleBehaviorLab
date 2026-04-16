@@ -372,6 +372,7 @@ class InferenceWorker(QThread):
                     clip_frame_probabilities = []
                     clip_frame_logits = []
                     clip_frame_embeddings = []
+                    clip_embeddings = []
                     clip_attention_maps = []
                     clip_starts = []
                     localization_bboxes = []
@@ -458,10 +459,7 @@ class InferenceWorker(QThread):
                             if _fo is not None:
                                 f_logits = _fo[0]
                                 batch_frame_logits = f_logits.detach().cpu().numpy()
-                                if self.use_ovr:
-                                    batch_frame_probs = torch.sigmoid(self._apply_ovr_temperature(f_logits)).detach().cpu().numpy()
-                                else:
-                                    batch_frame_probs = torch.softmax(f_logits, dim=-1).detach().cpu().numpy()
+                                batch_frame_probs = torch.sigmoid(self._apply_ovr_temperature(f_logits)).detach().cpu().numpy()
                                 _emb_src = (_fo[7] if len(_fo) > 7 and _fo[7] is not None else
                                             (_fo[6] if len(_fo) > 6 and _fo[6] is not None else None))
                                 if _emb_src is not None:
@@ -493,15 +491,17 @@ class InferenceWorker(QThread):
                             del batch
                             if isinstance(logits, tuple):
                                 logits = logits[0]
-                            if self.use_ovr:
-                                probs = torch.sigmoid(self._apply_ovr_temperature(logits))
-                            else:
-                                probs = torch.softmax(logits, dim=1)
+                            probs = torch.sigmoid(self._apply_ovr_temperature(logits))
                             preds = torch.argmax(probs, dim=1)
                             confs = torch.max(probs, dim=1)[0]
                             predictions.extend(preds.cpu().numpy().tolist())
                             confidences.extend(confs.cpu().numpy().tolist())
                             clip_probabilities.extend(probs.detach().cpu().numpy().tolist())
+                            if batch_frame_embs is not None:
+                                for b_i in range(batch_frame_embs.shape[0]):
+                                    clip_embeddings.append(batch_frame_embs[b_i].mean(axis=0))
+                            else:
+                                clip_embeddings.extend([None] * len(batch_clips))
                             del logits, probs, preds, confs
                         self._cleanup_memory(device)
                         if chunk_idx % 5 == 0:
@@ -526,41 +526,31 @@ class InferenceWorker(QThread):
                     video_frame_interval = max(1, int(round(video_orig_fps / max(1e-6, float(self.target_fps)))))
                     aggregated_frame_probs = None
                     aggregated_frame_logits = None
-                    aggregated_frame_embs = None
-                    has_embeddings = any(e is not None for e in clip_frame_embeddings)
                     has_frame_logits = any(fl is not None for fl in clip_frame_logits)
-                    embed_dim = clip_frame_embeddings[0].shape[-1] if has_embeddings and clip_frame_embeddings[0] is not None else 0
                     if clip_frame_probabilities and any(p is not None for p in clip_frame_probabilities):
                         log_fn("Aggregating per-frame outputs (center/confidence-weighted overlap merge)...")
                         num_classes = len(self.classes)
                         agg_probs = np.zeros((frame_count, num_classes), dtype=np.float32)
                         agg_logits = np.zeros((frame_count, num_classes), dtype=np.float32) if has_frame_logits else None
                         agg_counts = np.zeros((frame_count, 1), dtype=np.float32)
-                        if has_embeddings and embed_dim > 0:
-                            agg_embs = np.zeros((frame_count, embed_dim), dtype=np.float32)
-                        else:
-                            agg_embs = None
                         for i, probs in enumerate(clip_frame_probabilities):
                             if probs is None:
                                 continue
                             if i >= len(clip_starts):
                                 break
                             start_f = clip_starts[i]
-                            probs_arr = np.clip(np.array(probs, dtype=np.float32), 0.0, None)
+                            probs_arr = np.array(probs, dtype=np.float32)
+                            probs_arr = np.nan_to_num(probs_arr, nan=0.0, posinf=1.0, neginf=0.0)
+                            probs_arr = np.clip(probs_arr, 0.0, None)
                             if probs_arr.ndim != 2 or probs_arr.shape[1] != num_classes:
                                 continue
                             T = int(probs_arr.shape[0])
                             merge_w = self._build_center_merge_weights(T)
-                            # Confidence-weight each frame's contribution, but keep a
-                            # floor so uncertain clips still add a little evidence.
                             frame_conf = np.clip(np.max(probs_arr, axis=1), 0.0, 1.0)
                             conf_w = np.clip(0.1 + 0.9 * frame_conf, 0.1, 1.0).astype(np.float32)
                             logits_arr = None
-                            emb_arr = None
                             if agg_logits is not None and i < len(clip_frame_logits) and clip_frame_logits[i] is not None:
                                 logits_arr = np.array(clip_frame_logits[i], dtype=np.float32)
-                            if agg_embs is not None and clip_frame_embeddings[i] is not None:
-                                emb_arr = np.array(clip_frame_embeddings[i], dtype=np.float32)
                             for t in range(T):
                                 f_start = start_f + t * frame_interval
                                 f_end = min(f_start + frame_interval, frame_count)
@@ -573,22 +563,20 @@ class InferenceWorker(QThread):
                                 agg_counts[f_start:f_end] += w
                                 if logits_arr is not None and t < logits_arr.shape[0]:
                                     agg_logits[f_start:f_end] += logits_arr[t][np.newaxis, :] * w
-                                if emb_arr is not None and t < emb_arr.shape[0]:
-                                    agg_embs[f_start:f_end] += emb_arr[t][np.newaxis, :] * w
                         agg_probs = agg_probs / np.maximum(agg_counts, 1.0)
                         if agg_logits is not None:
                             agg_logits = agg_logits / np.maximum(agg_counts, 1.0)
                             aggregated_frame_logits = agg_logits
-                        if agg_embs is not None:
-                            agg_embs = agg_embs / np.maximum(agg_counts, 1.0)
-                            aggregated_frame_embs = agg_embs
-                        if not self.use_ovr:
-                            covered_mask = agg_counts.squeeze(-1) > 0
-                            row_sums = agg_probs[covered_mask].sum(axis=1, keepdims=True)
-                            safe_sums = np.maximum(row_sums, 1e-8)
-                            agg_probs[covered_mask] = agg_probs[covered_mask] / safe_sums
                         aggregated_frame_probs = agg_probs
                     clip_frame_embeddings = None
+                    clip_emb_matrix = None
+                    if clip_embeddings and any(e is not None for e in clip_embeddings):
+                        valid = [e for e in clip_embeddings if e is not None]
+                        if valid:
+                            clip_emb_matrix = np.stack([
+                                e if e is not None else np.zeros_like(valid[0])
+                                for e in clip_embeddings
+                            ])
                     res_entry = {
                         "predictions": predictions,
                         "confidences": confidences,
@@ -598,7 +586,7 @@ class InferenceWorker(QThread):
                         "orig_fps": video_orig_fps,
                         "frame_interval": video_frame_interval,
                         "aggregated_frame_probs": aggregated_frame_probs,
-                        "aggregated_frame_embs": aggregated_frame_embs,
+                        "clip_embeddings": clip_emb_matrix,
                     }
                     if sample_ranges:
                         res_entry["sample_ranges"] = sample_ranges

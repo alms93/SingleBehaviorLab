@@ -19,7 +19,7 @@ from singlebehaviorlab.backend.data_store import AnnotationManager
 from singlebehaviorlab.backend.uncertainty import save_uncertainty_report
 from .timeline_themes import TIMELINE_COLOR_THEMES, DEFAULT_THEME, get_palette as get_timeline_palette
 from .inference_worker import InferenceWorker, _sanitize_bbox_coords
-from .inference_popups import ClipPopupDialog, FrameSegmentPopupDialog
+from .inference_popups import ClipPopupDialog, FrameSegmentPopupDialog, PostprocessingDialog
 
 
 
@@ -86,7 +86,7 @@ class InferenceWidget(QWidget):
         self.viterbi_switch_penalty = float(self.config.get("inference_viterbi_switch_penalty", 0.35))
         self.ignore_label_name = "Ignored / Unknown"
         self.model_training_config = {}
-        self._use_ovr = False
+        self._use_ovr = True
         self._allowed_cooccurrence = set()
         self._ignore_threshold_user_modified = False
         self._applying_auto_threshold = False
@@ -274,7 +274,7 @@ class InferenceWidget(QWidget):
         self.filter_behavior_combo.addItem("All Behaviors")
         self.filter_behavior_combo.currentIndexChanged.connect(self._on_filter_changed)
         timeline_controls_layout.addWidget(self.filter_behavior_combo)
-        timeline_controls_layout.addWidget(QLabel("Cleanup:"))
+
         self.cleanup_preset_combo = QComboBox()
         self.cleanup_preset_combo.addItems(["None", "Light", "Standard", "Aggressive", "Custom"])
         self.cleanup_preset_combo.setCurrentText("Custom")
@@ -283,34 +283,72 @@ class InferenceWidget(QWidget):
             "Pick a preset or tweak individual settings (switches to 'Custom' automatically)."
         )
         self.cleanup_preset_combo.currentTextChanged.connect(self._on_cleanup_preset_changed)
-        timeline_controls_layout.addWidget(self.cleanup_preset_combo)
 
-        self._advanced_widgets: list = []
-
-        self.use_ignore_threshold_check = QCheckBox("Ignore low-confidence")
+        # --- Postprocessing state widgets ---
+        self.use_ignore_threshold_check = QCheckBox()
         self.use_ignore_threshold_check.setChecked(self.use_ignore_threshold)
         self.use_ignore_threshold_check.stateChanged.connect(self._on_ignore_threshold_changed)
-        timeline_controls_layout.addWidget(self.use_ignore_threshold_check)
-        self._advanced_widgets.append(self.use_ignore_threshold_check)
+        self.use_ignore_threshold_check.setVisible(False)
+
         self.ignore_threshold_spin = QDoubleSpinBox()
         self.ignore_threshold_spin.setDecimals(2)
         self.ignore_threshold_spin.setRange(0.0, 1.0)
         self.ignore_threshold_spin.setSingleStep(0.05)
         self.ignore_threshold_spin.setValue(self.global_ignore_threshold)
-        self.ignore_threshold_spin.setToolTip(
-            "Fallback threshold for classes without a per-class threshold.\n"
-            "Clips below this confidence are grayed out."
-        )
         self.ignore_threshold_spin.valueChanged.connect(self._on_ignore_threshold_changed)
-        self._lbl_default_tau = QLabel("Default τ:")
-        timeline_controls_layout.addWidget(self._lbl_default_tau)
-        self._advanced_widgets.append(self._lbl_default_tau)
-        timeline_controls_layout.addWidget(self.ignore_threshold_spin)
-        self._advanced_widgets.append(self.ignore_threshold_spin)
-        self.per_class_thresh_btn = QPushButton("Per-class τ")
-        self.per_class_thresh_btn.clicked.connect(self._open_per_class_thresholds_dialog)
-        timeline_controls_layout.addWidget(self.per_class_thresh_btn)
-        self._advanced_widgets.append(self.per_class_thresh_btn)
+        self.ignore_threshold_spin.setVisible(False)
+
+        self.embedding_refine_check = QCheckBox()
+        self.embedding_refine_check.stateChanged.connect(self._on_embedding_refine_changed)
+        self.embedding_refine_check.setVisible(False)
+
+        self.embedding_refine_threshold = QDoubleSpinBox()
+        self.embedding_refine_threshold.setRange(0.1, 0.99)
+        self.embedding_refine_threshold.setSingleStep(0.05)
+        self.embedding_refine_threshold.setValue(0.70)
+        self.embedding_refine_threshold.valueChanged.connect(self._on_embedding_refine_changed)
+        self.embedding_refine_threshold.setVisible(False)
+
+        self.merge_timeline_check = QCheckBox()
+        self.merge_timeline_check.stateChanged.connect(self._on_merge_changed)
+        self.merge_timeline_check.setVisible(False)
+
+        self.frame_aggregation_check = QCheckBox()
+        self.frame_aggregation_check.setChecked(True)
+        self.frame_aggregation_check.stateChanged.connect(self._on_frame_aggregation_changed)
+        self.frame_aggregation_check.setVisible(False)
+
+        self.use_viterbi_check = QCheckBox()
+        self.use_viterbi_check.setChecked(self.use_viterbi_decode)
+        self.use_viterbi_check.stateChanged.connect(self._on_viterbi_changed)
+        self.use_viterbi_check.setVisible(False)
+
+        self.viterbi_switch_penalty_spin = QDoubleSpinBox()
+        self.viterbi_switch_penalty_spin.setDecimals(2)
+        self.viterbi_switch_penalty_spin.setRange(0.0, 5.0)
+        self.viterbi_switch_penalty_spin.setSingleStep(0.05)
+        self.viterbi_switch_penalty_spin.setValue(self.viterbi_switch_penalty)
+        self.viterbi_switch_penalty_spin.valueChanged.connect(self._on_viterbi_changed)
+        self.viterbi_switch_penalty_spin.setVisible(False)
+
+        self.ovr_rows_check = QCheckBox()
+        self.ovr_rows_check.setChecked(True)
+        self.ovr_rows_check.stateChanged.connect(lambda: self._draw_timeline())
+        self.ovr_rows_check.setVisible(False)
+
+        self.ovr_show_all_check = QCheckBox()
+        self.ovr_show_all_check.setChecked(False)
+        self.ovr_show_all_check.stateChanged.connect(self._on_ovr_show_all_changed)
+        self.ovr_show_all_check.setVisible(False)
+
+        # --- Toolbar ---
+        self.postprocessing_settings_btn = QPushButton("Settings")
+        self.postprocessing_settings_btn.setToolTip("Open postprocessing settings")
+        self.postprocessing_settings_btn.clicked.connect(self._open_postprocessing_dialog)
+        timeline_controls_layout.addWidget(self.postprocessing_settings_btn)
+
+        timeline_controls_layout.addWidget(QLabel("Cleanup:"))
+        timeline_controls_layout.addWidget(self.cleanup_preset_combo)
 
         timeline_controls_layout.addWidget(QLabel("Theme:"))
         self.timeline_theme_combo = QComboBox()
@@ -319,105 +357,6 @@ class InferenceWidget(QWidget):
         self.timeline_theme_combo.setToolTip("Change timeline color theme")
         self.timeline_theme_combo.currentIndexChanged.connect(self._on_theme_changed)
         timeline_controls_layout.addWidget(self.timeline_theme_combo)
-        
-        self.embedding_refine_check = QCheckBox("Embedding refinement")
-        self.embedding_refine_check.setToolTip(
-            "Use the model's internal frame embeddings to detect true behavior\n"
-            "boundaries and correct predictions via label propagation."
-        )
-        self.embedding_refine_check.stateChanged.connect(self._on_embedding_refine_changed)
-        timeline_controls_layout.addWidget(self.embedding_refine_check)
-
-        self.embedding_refine_threshold = QDoubleSpinBox()
-        self.embedding_refine_threshold.setRange(0.1, 0.99)
-        self.embedding_refine_threshold.setSingleStep(0.05)
-        self.embedding_refine_threshold.setValue(0.70)
-        self.embedding_refine_threshold.setToolTip(
-            "Confidence threshold for embedding refinement.\n"
-            "Frames above this are trusted as seed labels.\n"
-            "Frames below defer to their embedding neighbors.\n"
-            "Lower = more aggressive correction."
-        )
-        self.embedding_refine_threshold.valueChanged.connect(self._on_embedding_refine_changed)
-        timeline_controls_layout.addWidget(self.embedding_refine_threshold)
-
-        self._advanced_toggle = QPushButton("Advanced")
-        self._advanced_toggle.setCheckable(True)
-        self._advanced_toggle.setChecked(False)
-        self._advanced_toggle.setToolTip("Show/hide detailed post-processing controls")
-        self._advanced_toggle.setStyleSheet("")
-        self._advanced_toggle.toggled.connect(self._toggle_advanced_controls)
-        timeline_controls_layout.addWidget(self._advanced_toggle)
-
-        self.merge_timeline_check = QCheckBox("Merge consecutive identical behaviors")
-        self.merge_timeline_check.setToolTip("Merge consecutive clips with the same predicted behavior")
-        self.merge_timeline_check.stateChanged.connect(self._on_merge_changed)
-        timeline_controls_layout.addWidget(self.merge_timeline_check)
-        self._advanced_widgets.append(self.merge_timeline_check)
-
-        self.frame_aggregation_check = QCheckBox("Precise frame boundaries")
-        self.frame_aggregation_check.setToolTip(
-            "Use overlapping clip votes to determine precise behavior boundaries.\n"
-            "Best used with step_frames < clip_length (e.g., step=4 for 16-frame clips).\n"
-            "Each frame gets votes from all clips that cover it, weighted by confidence."
-        )
-        self.frame_aggregation_check.stateChanged.connect(self._on_frame_aggregation_changed)
-        timeline_controls_layout.addWidget(self.frame_aggregation_check)
-
-        self.use_viterbi_check = QCheckBox("Viterbi decode")
-        self.use_viterbi_check.setToolTip(
-            "Inference-only sequence decoding on the merged frame probabilities.\n"
-            "Single-label models use classic Viterbi over classes.\n"
-            "OvR models use binary per-class Viterbi with co-occurrence-aware cleanup."
-        )
-        self.use_viterbi_check.setChecked(self.use_viterbi_decode)
-        self.use_viterbi_check.stateChanged.connect(self._on_viterbi_changed)
-        timeline_controls_layout.addWidget(self.use_viterbi_check)
-        self._advanced_widgets.append(self.use_viterbi_check)
-
-        self._lbl_viterbi_switch = QLabel("Viterbi switch:")
-        timeline_controls_layout.addWidget(self._lbl_viterbi_switch)
-        self._advanced_widgets.append(self._lbl_viterbi_switch)
-        self.viterbi_switch_penalty_spin = QDoubleSpinBox()
-        self.viterbi_switch_penalty_spin.setDecimals(2)
-        self.viterbi_switch_penalty_spin.setRange(0.0, 5.0)
-        self.viterbi_switch_penalty_spin.setSingleStep(0.05)
-        self.viterbi_switch_penalty_spin.setValue(self.viterbi_switch_penalty)
-        self.viterbi_switch_penalty_spin.setToolTip(
-            "Penalty for changing behavior between adjacent frames.\n"
-            "Higher values make the decoded sequence more stable."
-        )
-        self.viterbi_switch_penalty_spin.valueChanged.connect(self._on_viterbi_changed)
-        timeline_controls_layout.addWidget(self.viterbi_switch_penalty_spin)
-        self._advanced_widgets.append(self.viterbi_switch_penalty_spin)
-
-        self.per_class_seg_btn = QPushButton("Per-class seg rules")
-        self.per_class_seg_btn.setToolTip(
-            "Set smooth window, gap fill, and minimum segment length per behavior class."
-        )
-        self.per_class_seg_btn.clicked.connect(self._open_per_class_segment_rules_dialog)
-        timeline_controls_layout.addWidget(self.per_class_seg_btn)
-        self._advanced_widgets.append(self.per_class_seg_btn)
-
-        self.ovr_rows_check = QCheckBox("Per-class rows")
-        self.ovr_rows_check.setChecked(True)
-        self.ovr_rows_check.setToolTip(
-            "Per-class rows: one row per class. Uncheck for single-row timeline (OvR models only)."
-        )
-        self.ovr_rows_check.stateChanged.connect(lambda: self._draw_timeline())
-        timeline_controls_layout.addWidget(self.ovr_rows_check)
-        self._advanced_widgets.append(self.ovr_rows_check)
-
-        self.ovr_show_all_check = QCheckBox("Show all classes")
-        self.ovr_show_all_check.setChecked(False)
-        self.ovr_show_all_check.setToolTip(
-            "When enabled, every class above its threshold is shown independently\n"
-            "(no mutual exclusivity). When disabled, only the top-1 class and\n"
-            "allowed co-occurring classes are shown."
-        )
-        self.ovr_show_all_check.stateChanged.connect(self._on_ovr_show_all_changed)
-        timeline_controls_layout.addWidget(self.ovr_show_all_check)
-        self._advanced_widgets.append(self.ovr_show_all_check)
 
         timeline_controls_layout.addWidget(QLabel("Zoom (px/s):"))
         self.timeline_zoom_spin = QSpinBox()
@@ -437,7 +376,7 @@ class InferenceWidget(QWidget):
         self.export_timeline_btn.clicked.connect(self._export_timeline)
         self.export_timeline_btn.setEnabled(False)
         timeline_controls_layout.addWidget(self.export_timeline_btn)
-        
+
         self.save_results_btn = QPushButton("Save results")
         self.save_results_btn.setToolTip("Save inference results (including corrections) for downstream analysis")
         self.save_results_btn.clicked.connect(self._save_results)
@@ -468,8 +407,6 @@ class InferenceWidget(QWidget):
         self._interactive_timeline.frame_clicked.connect(self._on_interactive_frame_clicked)
         self._interactive_timeline.model_changed.connect(self._on_segments_edited)
         self._segments_model = None
-        
-        self._toggle_advanced_controls(False)
 
         timeline_group_layout.addWidget(timeline_controls_scroll)
         timeline_group_layout.addWidget(self._minimap)
@@ -795,11 +732,23 @@ class InferenceWidget(QWidget):
                     if clip_len:
                         self.clip_length_spin.setValue(int(clip_len))
                         self.log_text.append(f"Automatically set 'Frames per clip' to {clip_len} from model metadata.")
+                    else:
+                        self.log_text.append(
+                            f"Warning: clip_length not found in model metadata. "
+                            f"Using UI default ({self.clip_length_spin.value()}). "
+                            f"Set manually if this doesn't match training."
+                        )
 
                     meta_fps = meta_data.get("target_fps") or meta_data.get("training_config", {}).get("target_fps")
                     if meta_fps:
                         self.target_fps_spin.setValue(int(meta_fps))
                         self.log_text.append(f"Automatically set 'Target FPS' to {meta_fps} from model metadata.")
+                    else:
+                        self.log_text.append(
+                            f"Warning: target_fps not found in model metadata. "
+                            f"Using UI default ({self.target_fps_spin.value()}). "
+                            f"Set manually if this doesn't match training."
+                        )
                     
                     resolution = meta_data.get("resolution") or meta_data.get("training_config", {}).get("resolution")
                     if resolution:
@@ -832,7 +781,7 @@ class InferenceWidget(QWidget):
                     self._crop_min_size = float(train_cfg.get("classification_crop_min_size_norm", 0.04) or 0.04)
 
                     # OvR: use sigmoid scoring instead of softmax at inference
-                    self._use_ovr = bool(train_cfg.get("use_ovr", False))
+                    self._use_ovr = True
                     self._update_viterbi_ui_state()
                     self._allowed_cooccurrence = set()
                     self._ovr_temperatures = {}
@@ -1166,7 +1115,7 @@ class InferenceWidget(QWidget):
             use_localization_pipeline=getattr(self.model, "use_localization", False),
             crop_padding=getattr(self, "_crop_padding", 0.35),
             crop_min_size=getattr(self, "_crop_min_size", 0.04),
-            use_ovr=getattr(self, "_use_ovr", False),
+            use_ovr=True,
             ovr_temperatures=getattr(self, "_ovr_temperatures", {}),
             collect_attention=self.collect_attention_check.isChecked(),
             sample_ranges_by_video=sample_ranges_by_video,
@@ -1483,7 +1432,8 @@ class InferenceWidget(QWidget):
                         precomputed = entry.get("aggregated_frame_probs")
                         if isinstance(precomputed, list):
                             precomputed = np.asarray(precomputed, dtype=np.float32)
-                        if isinstance(precomputed, np.ndarray) and precomputed.ndim == 2 and precomputed.shape[0] > 0:
+                        if (isinstance(precomputed, np.ndarray) and precomputed.ndim == 2
+                                and precomputed.shape[0] > 0 and precomputed.shape[1] == len(self.classes)):
                             self._aggregated_frame_scores_norm = precomputed
                             self._aggregated_last_covered_frame = precomputed.shape[0]
                             self._build_timeline_segments()
@@ -1742,9 +1692,14 @@ class InferenceWidget(QWidget):
                 self.clip_starts = data["clip_starts"]
                 self.localization_bboxes = data.get("localization_bboxes", [])
                 self.total_frames = data.get("total_frames", 0)
-                self.corrected_labels = data.get("corrected_labels", {})
+                raw_corrections = data.get("corrected_labels", {})
+                n_preds = len(self.predictions)
+                self.corrected_labels = {
+                    int(k): int(v) for k, v in raw_corrections.items()
+                    if int(k) < n_preds
+                }
                 self.corrected_attr_labels = data.get("corrected_attr_labels", {})
-                
+
                 # Backwards compatibility: if total_frames not saved, try to get from video
                 if self.total_frames <= 0 and os.path.exists(first_video):
                     try:
@@ -1896,7 +1851,12 @@ class InferenceWidget(QWidget):
         self.clip_starts = data["clip_starts"]
         self.localization_bboxes = data.get("localization_bboxes", [])
         self.total_frames = data.get("total_frames", 0)
-        self.corrected_labels = data.get("corrected_labels", {})
+        raw_corrections = data.get("corrected_labels", {})
+        n_preds = len(self.predictions)
+        self.corrected_labels = {
+            int(k): int(v) for k, v in raw_corrections.items()
+            if int(k) < n_preds
+        }
         self.corrected_attr_labels = data.get("corrected_attr_labels", {})
         self.video_path = video_path
 
@@ -2898,6 +2858,15 @@ class InferenceWidget(QWidget):
 
         from singlebehaviorlab.backend.segments import SegmentsModel
 
+        use_multi = bool(
+            self._use_ovr
+            and self.aggregated_multiclass_segments
+            and getattr(self, "ovr_show_all_check", None) is not None
+            and self.ovr_show_all_check.isChecked()
+        )
+        seg_source = self.aggregated_multiclass_segments if use_multi else self.aggregated_segments
+        self._timeline_uses_multiclass = use_multi
+
         total_frames = self.total_frames
         if total_frames <= 0 and self.video_path and os.path.exists(self.video_path):
             try:
@@ -2906,12 +2875,12 @@ class InferenceWidget(QWidget):
                 cap.release()
             except Exception:
                 pass
-        if total_frames <= 0 and self.aggregated_segments:
-            total_frames = self.aggregated_segments[-1]["end"] + 1
+        if total_frames <= 0 and seg_source:
+            total_frames = seg_source[-1]["end"] + 1
 
         orig_fps = self._get_video_fps(self.video_path) if self.video_path else 30.0
 
-        model = SegmentsModel(self.aggregated_segments, self.classes, total_frames, orig_fps)
+        model = SegmentsModel(seg_source, self.classes, total_frames, orig_fps)
         self._segments_model = model
 
         colors = self._get_timeline_qcolors()
@@ -2933,12 +2902,14 @@ class InferenceWidget(QWidget):
     
     def _on_embedding_refine_changed(self, *_args):
         if self.predictions and self.frame_aggregation_check.isChecked():
-            self._build_timeline_segments()
+            self._compute_aggregated_timeline()
             self._display_results()
 
+    def _open_postprocessing_dialog(self):
+        PostprocessingDialog(self).exec()
+
     def _toggle_advanced_controls(self, show: bool):
-        for w in self._advanced_widgets:
-            w.setVisible(show)
+        pass
 
     def _on_interactive_segment_clicked(self, seg_index: int):
         if not self._segments_model or seg_index < 0 or seg_index >= len(self._segments_model):
@@ -2951,21 +2922,27 @@ class InferenceWidget(QWidget):
     def _on_segments_edited(self):
         if not self._segments_model:
             return
-        self.aggregated_segments = self._segments_model.to_dicts()
+        dicts = self._segments_model.to_dicts()
+        if getattr(self, "_timeline_uses_multiclass", False):
+            self.aggregated_multiclass_segments = dicts
+        else:
+            self.aggregated_segments = dicts
 
     def _draw_clip_based_timeline(self):
         from singlebehaviorlab.backend.segments import SegmentsModel
         corrected_preds = self._effective_predictions()
         if not corrected_preds:
             return
-        total_frames = self.total_frames or len(corrected_preds) * max(1, self.clip_length_spin.value())
         orig_fps = self._get_video_fps(self.video_path) if self.video_path else 30.0
+        frame_interval = self._get_saved_frame_interval(self.video_path, orig_fps)
+        clip_length = max(1, self.clip_length_spin.value())
+        clip_span = (clip_length - 1) * frame_interval + 1
+        total_frames = self.total_frames or len(corrected_preds) * clip_span
         step = max(1, self.step_frames_spin.value())
         segments = []
         for i, (pred, conf) in enumerate(zip(corrected_preds, self.confidences)):
             start = self.clip_starts[i] if i < len(self.clip_starts) else i * step
-            end = self.clip_starts[i + 1] if i + 1 < len(self.clip_starts) else start + self.clip_length_spin.value()
-            end = min(end, total_frames)
+            end = min(start + clip_span, total_frames)
             if pred >= 0:
                 segments.append({"class": int(pred), "start": int(start), "end": int(end), "confidence": float(conf)})
         model = SegmentsModel(segments, self.classes, total_frames, orig_fps)
@@ -3255,39 +3232,12 @@ class InferenceWidget(QWidget):
         T, C = fs.shape
         self._aggregated_last_covered_frame = T
         covered_mask = np.sum(fs, axis=1) > 1e-8
-        if self.use_viterbi_decode and not self._use_ovr:
-            frame_labels = self._decode_viterbi_labels(fs, covered_mask)
-        else:
-            frame_labels = np.argmax(fs, axis=1)
-            frame_labels[~covered_mask] = -1
-            # Smooth raw argmax labels (majority-vote temporal smoothing).
-            frame_labels = self._smooth_frame_labels(frame_labels)
-
-        # Apply ignore threshold after smoothing.
-        if self.use_ignore_threshold and not self._use_ovr:
-            for fi in range(T):
-                ci = int(frame_labels[fi])
-                if ci < 0:
-                    continue
-                thr = self._threshold_for_pred(ci)
-                if float(fs[fi, ci]) < thr:
-                    frame_labels[fi] = -1
+        frame_labels = np.argmax(fs, axis=1)
+        frame_labels[~covered_mask] = -1
+        frame_labels = self._smooth_frame_labels(frame_labels)
 
         frame_labels = self._apply_gap_merge_and_min_seg(frame_labels, T)
 
-        if self.embedding_refine_check.isChecked():
-            frame_embs = None
-            if hasattr(self, 'video_path') and self.video_path and self.video_path in self.results_cache:
-                frame_embs = self.results_cache[self.video_path].get("aggregated_frame_embs")
-            if isinstance(frame_embs, np.ndarray) and frame_embs.shape[0] >= T:
-                from singlebehaviorlab.backend.embedding_refine import refine_with_embeddings
-                frame_conf = np.max(fs, axis=1)
-                frame_labels = refine_with_embeddings(
-                    frame_labels[:T], frame_embs[:T], frame_conf,
-                    n_classes=C,
-                    min_segment_frames=max(3, self._min_segment_frames),
-                    confidence_threshold=float(self.embedding_refine_threshold.value()),
-                )
 
         segments = []
         cur_cls = int(frame_labels[0])
@@ -3314,136 +3264,83 @@ class InferenceWidget(QWidget):
 
         self.aggregated_multiclass_segments = []
         self._aggregated_active_mask = None
-        if self._use_ovr:
+
+        show_all = getattr(self, "ovr_show_all_check", None) is not None and self.ovr_show_all_check.isChecked()
+
+        if self.use_viterbi_decode:
             active_mask = np.zeros((T, C), dtype=bool)
-            ovr_threshold = None if self.use_ignore_threshold else 0.35
-            show_all = getattr(self, "ovr_show_all_check", None) is not None and self.ovr_show_all_check.isChecked()
-            if self.use_viterbi_decode:
-                for ci in range(C):
-                    thr = self._threshold_for_pred(ci) if self.use_ignore_threshold else float(ovr_threshold)
-                    active_mask[:, ci] = self._binary_viterbi_decode(fs[:, ci], thr)
-                if not show_all:
-                    pruned_mask = np.zeros_like(active_mask)
-                    for fi in range(T):
-                        active_idx = np.flatnonzero(active_mask[fi])
-                        if active_idx.size == 0:
-                            continue
-                        scores = fs[fi, active_idx]
-                        top_ci = int(active_idx[int(np.argmax(scores))])
-                        pruned_mask[fi, top_ci] = True
-                        if self._allowed_cooccurrence:
-                            top_name = self.classes[top_ci]
-                            for ci in active_idx:
-                                ci = int(ci)
-                                if ci == top_ci:
-                                    continue
-                                name = self.classes[ci]
-                                if (top_name, name) in self._allowed_cooccurrence:
-                                    pruned_mask[fi, ci] = True
-                    active_mask = pruned_mask
-            else:
-                for fi in range(T):
-                    for ci in self._active_ovr_indices_from_scores(fs[fi], threshold_override=ovr_threshold):
-                        if 0 <= ci < C:
-                            active_mask[fi, ci] = True
+            for ci in range(C):
+                thr = self._threshold_for_pred(ci) if self.use_ignore_threshold else 0.35
+                active_mask[:, ci] = self._binary_viterbi_decode(fs[:, ci], thr)
+        else:
+            thresholds = np.array([
+                self._threshold_for_pred(ci) if self.use_ignore_threshold else 0.35
+                for ci in range(C)
+            ], dtype=np.float32)
+            active_mask = fs >= thresholds[np.newaxis, :]
+
+        self._aggregated_active_mask = active_mask
+
+        for ci in range(C):
+            col = active_mask[:, ci].copy()
+
+            smooth_win = self._smooth_win_for_class(ci)
+            if (not self.use_viterbi_decode) and smooth_win > 1 and T > 1:
+                kernel = np.ones(smooth_win, dtype=np.float32)
+                counts = np.convolve(col.astype(np.float32), kernel, mode='same')
+                col = counts > (smooth_win / 2.0)
+
+            gap_thr = self._gap_fill_for_class(ci)
+            if gap_thr > 0:
+                diff = np.diff(col.astype(np.int8), prepend=0, append=0)
+                off_starts = np.flatnonzero(diff == -1)
+                on_resumes = np.flatnonzero(diff == 1)
+                for k in range(len(off_starts)):
+                    candidates = on_resumes[on_resumes > off_starts[k]]
+                    if candidates.size > 0:
+                        gap_end = candidates[0]
+                        if (gap_end - off_starts[k]) <= gap_thr:
+                            col[off_starts[k]:gap_end] = True
+
+            min_len_cls = self._min_seg_for_class(ci)
+            if min_len_cls > 1:
+                diff = np.diff(col.astype(np.int8), prepend=0, append=0)
+                on_starts = np.flatnonzero(diff == 1)
+                on_ends = np.flatnonzero(diff == -1)
+                for k in range(len(on_starts)):
+                    if (on_ends[k] - on_starts[k]) < min_len_cls:
+                        col[on_starts[k]:on_ends[k]] = False
+
+            active_mask[:, ci] = col
+
+        if not show_all:
+            masked_scores = np.where(active_mask, fs, -1.0)
+            top_ci = np.argmax(masked_scores, axis=1)
+            pruned_mask = np.zeros_like(active_mask)
+            has_any = np.any(active_mask, axis=1)
+            pruned_mask[has_any, top_ci[has_any]] = True
+            if self._allowed_cooccurrence:
+                for fi in np.flatnonzero(has_any):
+                    top = int(top_ci[fi])
+                    top_name = self.classes[top]
+                    for ci in np.flatnonzero(active_mask[fi]):
+                        ci = int(ci)
+                        if ci != top and (top_name, self.classes[ci]) in self._allowed_cooccurrence:
+                            pruned_mask[fi, ci] = True
+            active_mask = pruned_mask
             self._aggregated_active_mask = active_mask
 
-            max_gap = int(max(0, getattr(self, "_merge_gap_frames", 0)))
-            min_len = int(max(1, getattr(self, "_min_segment_frames", 1)))
-
-            # Per-class gap-fill and min-segment cleanup for OvR.
-            for ci in range(C):
-                col = active_mask[:, ci]
-                smooth_win = self._smooth_win_for_class(ci)
-                if (not self.use_viterbi_decode) and smooth_win > 1 and T > 1:
-                    half = smooth_win // 2
-                    smooth_col = col.copy()
-                    for i in range(T):
-                        left = max(0, i - half)
-                        right = min(T, i + half + 1)
-                        window = col[left:right]
-                        on_count = int(np.count_nonzero(window))
-                        off_count = int(window.size - on_count)
-                        if on_count > off_count:
-                            smooth_col[i] = True
-                        elif off_count > on_count:
-                            smooth_col[i] = False
-                    col = smooth_col
-
-                gap_thr = self._gap_fill_for_class(ci)
-                min_len_cls = self._min_seg_for_class(ci)
-                # Gap-fill: a short "off" gap between two "on" runs of the same class.
-                if gap_thr > 0:
-                    i = 0
-                    while i < T:
-                        if col[i]:
-                            i += 1
-                            continue
-                        j = i
-                        while j + 1 < T and not col[j + 1]:
-                            j += 1
-                        gap_len = j - i + 1
-                        left_on = col[i - 1] if i > 0 else False
-                        right_on = col[j + 1] if j + 1 < T else False
-                        if gap_len <= gap_thr and left_on and right_on:
-                            col[i:j + 1] = True
-                        i = j + 1
-                # Min-segment: remove short "on" runs.
-                if min_len_cls > 1:
-                    i = 0
-                    while i < T:
-                        if not col[i]:
-                            i += 1
-                            continue
-                        j = i
-                        while j + 1 < T and col[j + 1]:
-                            j += 1
-                        run_len = j - i + 1
-                        if run_len < min_len_cls:
-                            col[i:j + 1] = False
-                        i = j + 1
-                active_mask[:, ci] = col
-
-            if not show_all:
-                pruned_mask = np.zeros_like(active_mask)
-                for fi in range(T):
-                    active_idx = np.flatnonzero(active_mask[fi])
-                    if active_idx.size == 0:
-                        continue
-                    scores = fs[fi, active_idx]
-                    top_ci = int(active_idx[int(np.argmax(scores))])
-                    pruned_mask[fi, top_ci] = True
-                    if self._allowed_cooccurrence:
-                        top_name = self.classes[top_ci]
-                        for ci in active_idx:
-                            ci = int(ci)
-                            if ci == top_ci:
-                                continue
-                            name = self.classes[ci]
-                            if (top_name, name) in self._allowed_cooccurrence:
-                                pruned_mask[fi, ci] = True
-                active_mask = pruned_mask
-                self._aggregated_active_mask = active_mask
-
-            multi_segments = []
-            for ci in range(C):
-                run_start = None
-                for fi in range(T):
-                    is_on = bool(active_mask[fi, ci])
-                    if is_on and run_start is None:
-                        run_start = fi
-                    if run_start is not None and (not is_on or fi == T - 1):
-                        run_end = fi if (is_on and fi == T - 1) else fi - 1
-                        if run_end >= run_start:
-                            conf = float(np.mean(fs[run_start:run_end + 1, ci]))
-                            multi_segments.append({
-                                "class": int(ci),
-                                "start": int(run_start),
-                                "end": int(run_end),
-                                "confidence": conf,
-                            })
-                        run_start = None
-            self.aggregated_multiclass_segments = multi_segments
+        multi_segments = []
+        for ci in range(C):
+            col = active_mask[:, ci]
+            diff = np.diff(col.astype(np.int8), prepend=0, append=0)
+            on_starts = np.flatnonzero(diff == 1)
+            on_ends = np.flatnonzero(diff == -1) - 1
+            for k in range(len(on_starts)):
+                s, e = int(on_starts[k]), int(on_ends[k])
+                conf = float(np.mean(fs[s:e + 1, ci]))
+                multi_segments.append({"class": ci, "start": s, "end": e, "confidence": conf})
+        self.aggregated_multiclass_segments = multi_segments
     
     def _compute_aggregated_timeline(self):
         """
@@ -3461,9 +3358,9 @@ class InferenceWidget(QWidget):
 
         # Prefer the exact worker-built merged frame timeline when available.
         # This preserves center-weighted overlap merge.
-        if not self.corrected_labels:
+        if not self.corrected_labels and not self.embedding_refine_check.isChecked():
             precomputed = self._get_precomputed_aggregated_probs(self.video_path)
-            if precomputed is not None:
+            if precomputed is not None and precomputed.ndim == 2 and precomputed.shape[1] == len(self.classes):
                 self._aggregated_frame_scores_norm = precomputed.copy()
                 self._aggregated_last_covered_frame = int(precomputed.shape[0])
                 self._build_timeline_segments()
@@ -3474,13 +3371,14 @@ class InferenceWidget(QWidget):
         step_frames = self.step_frames_spin.value()
         target_fps = self.target_fps_spin.value()
         num_classes = len(self.classes)
-        
+        orig_fps = self._get_video_fps(self.video_path) if self.video_path else 30.0
+        frame_interval = self._get_saved_frame_interval(self.video_path, orig_fps)
+
         # Get total frames from video or estimate from clip_starts
         if self.total_frames > 0:
             total_frames = self.total_frames
         elif self.clip_starts:
-            # Estimate: last clip start + clip_length
-            total_frames = self.clip_starts[-1] + clip_length + 1
+            total_frames = self.clip_starts[-1] + (clip_length - 1) * frame_interval + 1
         else:
             self.aggregated_segments = []
             self.aggregated_multiclass_segments = []
@@ -3489,12 +3387,23 @@ class InferenceWidget(QWidget):
             self._aggregated_last_covered_frame = 0
             return
         
-        orig_fps = self._get_video_fps(self.video_path) if self.video_path else 30.0
-        frame_interval = self._get_saved_frame_interval(self.video_path, orig_fps)
-        
         # Apply corrections + ignore-threshold gating
         corrected_preds = self._effective_predictions()
-        
+
+        if self.embedding_refine_check.isChecked():
+            clip_embs = None
+            if self.video_path and self.video_path in self.results_cache:
+                clip_embs = self.results_cache[self.video_path].get("clip_embeddings")
+            if isinstance(clip_embs, np.ndarray) and clip_embs.shape[0] == len(corrected_preds):
+                from singlebehaviorlab.backend.embedding_refine import refine_clip_predictions
+                clip_labels = np.array(corrected_preds, dtype=np.int32)
+                clip_confs = np.array(self.confidences, dtype=np.float32)
+                refined = refine_clip_predictions(
+                    clip_labels, clip_embs, clip_confs,
+                    confidence_threshold=float(self.embedding_refine_threshold.value()),
+                )
+                corrected_preds = refined.tolist()
+
         # Initialize score matrix: [total_frames, num_classes] and coverage count
         frame_scores = np.zeros((total_frames, num_classes), dtype=np.float32)
         frame_coverage = np.zeros(total_frames, dtype=np.float32)
@@ -3512,8 +3421,9 @@ class InferenceWidget(QWidget):
         )
         
         # Accumulate votes from each clip
-        for clip_i, (pred_class, conf, start_frame) in enumerate(zip(corrected_preds, self.confidences, self.clip_starts)):
-            end_frame = min(start_frame + clip_length * frame_interval, total_frames)
+        n_clips = min(len(corrected_preds), len(self.confidences), len(self.clip_starts))
+        for clip_i, (pred_class, conf, start_frame) in enumerate(zip(corrected_preds[:n_clips], self.confidences[:n_clips], self.clip_starts[:n_clips])):
+            end_frame = min(start_frame + (clip_length - 1) * frame_interval + 1, total_frames)
 
             if start_frame >= total_frames:
                 continue
@@ -3555,11 +3465,6 @@ class InferenceWidget(QWidget):
                         probs_vec = np.clip(probs_vec, 0.0, None)
                         s = float(np.sum(probs_vec))
                         if s > 1e-8:
-                            if not self._use_ovr:
-                                probs_vec = probs_vec / s
-                            if (not self._use_ovr) and int(np.argmax(probs_vec)) != int(pred_class):
-                                probs_vec = np.zeros(num_classes, dtype=np.float32)
-                                probs_vec[int(pred_class)] = 1.0
                             frame_scores[start_frame:end_frame, :] += probs_vec[np.newaxis, :]
                             frame_coverage[start_frame:end_frame] += 1.0
                             used_full_probability_voting = True
@@ -3574,16 +3479,6 @@ class InferenceWidget(QWidget):
             frame_scores,
             np.maximum(frame_coverage[:, np.newaxis], 1.0),
         )
-        
-        # For Softmax, ensure final probabilities sum to 1 (averaging usually does, but small errors can creep in)
-        if not self._use_ovr:
-            sums = np.sum(frame_scores_norm, axis=1, keepdims=True)
-            valid_sums = sums > 1e-8
-            frame_scores_norm = np.where(
-                valid_sums,
-                frame_scores_norm / sums,
-                frame_scores_norm
-            )
         
         # Find the last frame with actual clip coverage to avoid phantom
         # class-0 labels from uncovered tail frames (argmax of all-zeros = 0).
@@ -3937,7 +3832,7 @@ class InferenceWidget(QWidget):
                         if i < len(display_starts) - 1:
                             end_frame = display_starts[i + 1]
                         else:
-                            end_frame = start_frame + (clip_length * frame_interval)
+                            end_frame = start_frame + (clip_length - 1) * frame_interval + 1
                         start_time = start_frame / orig_fps
                         end_time = end_frame / orig_fps
                         writer.writerow([behavior, f"{start_time:.3f}", f"{end_time:.3f}", start_frame, end_frame, f"{conf:.3f}"])

@@ -186,6 +186,8 @@ def run_inference_on_video(
         multi_scale=multi_scale,
     )
     model.load_head(model_path)
+    if hasattr(model, "frame_head") and model.frame_head is not None:
+        model.frame_head.use_ovr = True
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -225,13 +227,13 @@ def run_inference_on_video(
         frame_output = getattr(model, "_frame_output", None)
         if frame_output is not None:
             f_logits = frame_output[0]
-            batch_frame_probs = torch.softmax(f_logits, dim=-1).detach().cpu().numpy()
+            batch_frame_probs = torch.sigmoid(f_logits).detach().cpu().numpy()
             for b_i in range(batch_frame_probs.shape[0]):
                 clip_frame_probabilities.append(batch_frame_probs[b_i].tolist())
         else:
             clip_frame_probabilities.extend([] for _ in batch_clips)
 
-        probs = torch.softmax(logits, dim=1)
+        probs = torch.sigmoid(logits)
         preds = torch.argmax(probs, dim=1)
         confs = torch.max(probs, dim=1)[0]
         predictions.extend(int(p) for p in preds.cpu().numpy().tolist())

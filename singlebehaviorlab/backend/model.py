@@ -555,10 +555,7 @@ class DilatedTemporalHead(nn.Module):
             x_conv = x.transpose(1, 2)  # [B, tcn_in, T_pooled]
             stage_logits = self.stage1(x_conv)
             for refine in self.refine_stages:
-                if self.use_ovr:
-                    refine_in = torch.sigmoid(stage_logits)
-                else:
-                    refine_in = torch.softmax(stage_logits, dim=1)
+                refine_in = torch.sigmoid(stage_logits)
                 stage_logits = stage_logits + refine(refine_in)
 
             stage_logits_pooled = stage_logits

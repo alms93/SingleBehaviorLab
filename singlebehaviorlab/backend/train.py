@@ -1100,7 +1100,7 @@ def _run_augmentation_ablation_eval(
     from .augmentations import ClipAugment
 
     aug_opts = config.get("augmentation_options") or {}
-    use_ovr = config.get("use_ovr", False)
+    use_ovr = config.get("use_ovr", True)
 
     # Map of augmentation toggle names → ClipAugment kwargs that isolate that aug
     aug_toggles = {
@@ -1395,7 +1395,7 @@ def train_model(
             log_fn(f"Creating data loaders (batch_size={config['batch_size']})...")
         
         use_weighted_sampler = config.get("use_weighted_sampler", False)
-        use_ovr = config.get("use_ovr", False)
+        use_ovr = config.get("use_ovr", True)
         _confusion_warmup_pct = float(config.get("confusion_sampler_warmup_pct", 0.2))
         sampler = None
         batch_sampler = None
