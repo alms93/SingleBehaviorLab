@@ -353,34 +353,36 @@ The clustering result can then be opened in the GUI via **Clustering tab → Loa
 
 ## 6. Python API
 
-Every CLI command is a thin wrapper around a backend function, so the same pipeline is available from Python notebooks and scripts.
+Every CLI command is a thin wrapper around a library function that is re-exported at the package top level, so the same pipeline is available from Python notebooks and scripts with a single import:
 
 ```python
-from singlebehaviorlab.backend.training_runner import run_training_session
-from singlebehaviorlab.backend.inference import run_inference_on_video
-from singlebehaviorlab.backend.registration import run_registration, RegistrationParams
-from singlebehaviorlab.backend.segmentation import (
-    run_sam2_segmentation,
-    load_prompts_json,
-    save_prompts_json,
-)
-from singlebehaviorlab.backend.clustering import (
-    run_clustering,
-    ClusteringParams,
-    plot_umap_clusters,
-)
+import singlebehaviorlab as sbl
 ```
+
+| Short name | What it does |
+|---|---|
+| `sbl.train(experiment_dir, ...)` | Train a behavior classifier (wraps `backend.training_runner.run_training_session`). |
+| `sbl.infer(model, video, out, ...)` | Run a classifier on a video (wraps `backend.inference.run_inference_on_video`). |
+| `sbl.segment(video, prompts, out, ...)` | Propagate SAM2 masks from a prompts JSON (wraps `backend.segmentation.run_sam2_segmentation`). |
+| `sbl.register(video, mask, out, ...)` | Extract VideoPrism embeddings (wraps `backend.registration.run_registration`). |
+| `sbl.cluster(matrix, out, ...)` | UMAP + Leiden/HDBSCAN (wraps `backend.clustering.run_clustering`). |
+| `sbl.plot_umap_clusters(state, ...)` | Render a UMAP scatter from an analysis pickle or in-memory state. |
+| `sbl.RegistrationParams`, `sbl.ClusteringParams` | Dataclasses carrying tuning knobs for register and cluster. |
+| `sbl.load_prompts_json`, `sbl.save_prompts_json` | Helpers for the SAM2 prompts file format. |
+| `sbl.load_config(path=None)` | Load an experiment `config.yaml` with sensible defaults. |
+
+The re-exports use lazy import (`__getattr__`) so `import singlebehaviorlab` stays cheap — torch, jax, tensorflow, sam2, and videoprism only load when you actually touch one of the functions above. The fully-qualified `singlebehaviorlab.backend.*` paths still work if you prefer them.
 
 ### Plotting a saved analysis file
 
 ```python
-from singlebehaviorlab.backend.clustering import plot_umap_clusters
+import singlebehaviorlab as sbl
 
 # Pop up an interactive window
-plot_umap_clusters("session_042_analysis.pkl", show=True)
+sbl.plot_umap_clusters("session_042_analysis.pkl", show=True)
 
 # Save a PDF with a custom title
-plot_umap_clusters(
+sbl.plot_umap_clusters(
     "session_042_analysis.pkl",
     save="session_042_umap.pdf",
     title="Session 042 — open field",
@@ -391,7 +393,7 @@ plot_umap_clusters(
 import pickle
 with open("session_042_analysis.pkl", "rb") as f:
     state = pickle.load(f)
-fig = plot_umap_clusters(state, show=True, save="session_042_umap.pdf")
+fig = sbl.plot_umap_clusters(state, show=True, save="session_042_umap.pdf")
 ```
 
 `plot_umap_clusters` returns the `matplotlib.figure.Figure` so callers can customise it further or embed it in a notebook. When `show=False` and no display is available, the function forces a non-interactive matplotlib backend, so it is safe to call over SSH without X forwarding.
