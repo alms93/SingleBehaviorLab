@@ -820,6 +820,15 @@ class RegistrationWidget(QWidget):
         )
         output_layout.addWidget(self.flip_invariant_check)
 
+        self.align_orientation_check = QCheckBox("Align orientation (mask PCA)")
+        self.align_orientation_check.setChecked(False)
+        self.align_orientation_check.setToolTip(
+            "Detect the animal's body axis from the SAM2 mask via PCA and rotate\n"
+            "each clip to align the major axis horizontally before embedding.\n"
+            "Removes rotational variation without extra VideoPrism runs."
+        )
+        output_layout.addWidget(self.align_orientation_check)
+
         self.append_embeddings_check = QCheckBox("Append to existing embeddings if present")
         self.append_embeddings_check.setChecked(False)
         self.append_embeddings_check.setToolTip("When enabled, if an existing behaviorome matrix/metadata is found in the experiment, new embeddings will be appended instead of creating a new file.")

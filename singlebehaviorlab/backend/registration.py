@@ -41,6 +41,7 @@ class RegistrationParams:
     step_frames: Optional[int] = None
     backbone_model: str = "videoprism_public_v1_base"
     flip_invariant: bool = False
+    align_orientation: bool = False
     experiment_name: Optional[str] = None
 
     @property
@@ -52,6 +53,58 @@ class RegistrationParams:
     def with_overrides(self, **kwargs: Any) -> "RegistrationParams":
         replacements = {k: v for k, v in kwargs.items() if v is not None}
         return RegistrationParams(**{**self.__dict__, **replacements})
+
+
+def _compute_mask_angle(mask_path: str, start_frame: int, end_frame: int) -> float:
+    """Return the rotation angle (degrees) to align the animal's major axis horizontally."""
+    import h5py
+    try:
+        with h5py.File(mask_path, "r") as f:
+            frames_group = f.get("frame_objects")
+            if frames_group is None:
+                return 0.0
+            all_yx = []
+            for fi in range(start_frame, min(end_frame, start_frame + 8)):
+                frame_key = f"frame_{fi:06d}"
+                fg = frames_group.get(frame_key)
+                if fg is None:
+                    continue
+                for obj_key in fg:
+                    obj = fg[obj_key]
+                    mask = obj.get("mask")
+                    if mask is None:
+                        continue
+                    mask_arr = np.array(mask)
+                    bbox = np.array(obj.attrs.get("bbox", (0, 0, 0, 0)))
+                    if mask_arr.size == 0 or not np.any(mask_arr):
+                        continue
+                    rows, cols = np.where(mask_arr > 0)
+                    rows = rows + int(bbox[1])
+                    cols = cols + int(bbox[0])
+                    all_yx.append(np.column_stack([rows, cols]))
+            if not all_yx:
+                return 0.0
+            coords = np.concatenate(all_yx, axis=0).astype(np.float64)
+            if len(coords) < 10:
+                return 0.0
+            coords -= coords.mean(axis=0)
+            cov = np.cov(coords.T)
+            eigvals, eigvecs = np.linalg.eigh(cov)
+            major_axis = eigvecs[:, -1]
+            angle_rad = np.arctan2(major_axis[0], major_axis[1])
+            return -np.degrees(angle_rad)
+    except Exception:
+        return 0.0
+
+
+def _rotate_frames(frames: np.ndarray, angle: float) -> np.ndarray:
+    if abs(angle) < 2.0:
+        return frames
+    h, w = frames.shape[1], frames.shape[2]
+    center = (w / 2, h / 2)
+    M = cv2.getRotationMatrix2D(center, angle, 1.0)
+    rotated = np.array([cv2.warpAffine(f, M, (w, h), borderValue=(255, 255, 255)) for f in frames])
+    return rotated
 
 
 def _load_clip_frames(clip_path: str) -> Optional[np.ndarray]:
@@ -73,8 +126,11 @@ def _extract_embedding(
     frames: np.ndarray,
     target_size: int,
     flip_invariant: bool = False,
+    rotation_angle: float = 0.0,
 ) -> Optional[np.ndarray]:
     try:
+        if abs(rotation_angle) >= 2.0:
+            frames = _rotate_frames(frames, rotation_angle)
         resized = np.array([cv2.resize(f, (target_size, target_size)) for f in frames])
         tensor = torch.from_numpy(np.transpose(resized, (0, 3, 1, 2))).float() / 255.0
         tensor = tensor.unsqueeze(0)
@@ -179,6 +235,8 @@ def run_registration(
     metadata_rows: list[dict[str, Any]] = []
     total = len(clip_entries)
 
+    mask_path_str = str(Path(mask_path).expanduser().resolve())
+
     for i, (clip_path, start_frame, end_frame) in enumerate(clip_entries, start=1):
         if progress_callback:
             progress_callback(i, total)
@@ -186,7 +244,10 @@ def run_registration(
         if frames is None or len(frames) == 0:
             _log(f"Skipping {os.path.basename(clip_path)}: no frames")
             continue
-        embedding = _extract_embedding(backbone, frames, params.target_size, params.flip_invariant)
+        rot_angle = 0.0
+        if params.align_orientation and start_frame is not None and end_frame is not None:
+            rot_angle = _compute_mask_angle(mask_path_str, start_frame, end_frame)
+        embedding = _extract_embedding(backbone, frames, params.target_size, params.flip_invariant, rot_angle)
         del frames
         if embedding is None:
             _log(f"Skipping {os.path.basename(clip_path)}: embedding failed")
