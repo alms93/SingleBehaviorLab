@@ -243,13 +243,6 @@ class ClusteringWidget(QWidget):
         )
         preprocess_layout.addWidget(self.subtract_video_mean_check)
 
-        self.pca_whiten_check = QCheckBox("PCA whitening")
-        self.pca_whiten_check.setToolTip(
-            "Decorrelate embedding dimensions and equalize their variance.\n"
-            "Reduces dominance of high-variance nuisance factors (lighting, color)\n"
-            "without discarding any information."
-        )
-        preprocess_layout.addWidget(self.pca_whiten_check)
 
         self.preprocess_btn = QPushButton("Apply preprocessing")
         self.preprocess_btn.clicked.connect(self.apply_preprocessing)
@@ -809,12 +802,6 @@ class ClusteringWidget(QWidget):
             if norm_method != 'none':
                 steps.append(norm_method)
 
-            if self.pca_whiten_check.isChecked():
-                from sklearn.decomposition import PCA
-                n_components = min(X_norm.shape[0], X_norm.shape[1])
-                pca = PCA(n_components=n_components, whiten=True)
-                X_norm = pca.fit_transform(X_norm)
-                steps.append(f"pca-whiten({n_components}d)")
 
             self.processed_data = pd.DataFrame(X_norm, index=X.index, columns=range(X_norm.shape[1]))
 

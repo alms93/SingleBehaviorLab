@@ -30,7 +30,6 @@ class ClusteringParams:
     min_dist: float = 0.1
     normalization: str = "standard"
     subtract_video_mean: bool = False
-    whiten: bool = False
     leiden_resolution: float = 1.0
     leiden_k: int = 15
     min_cluster_size: int = 10
@@ -179,12 +178,6 @@ def run_clustering(
 
     processed = _normalize(X, params.normalization)
 
-    if params.whiten:
-        from sklearn.decomposition import PCA as _PCA
-        n_comp = min(processed.shape[0], processed.shape[1])
-        arr = _PCA(n_components=n_comp, whiten=True).fit_transform(processed.values)
-        processed = pd.DataFrame(arr, index=processed.index)
-        _log(f"Applied PCA whitening ({n_comp} components)")
 
     _log(f"Processed shape: {processed.shape} (samples × features)")
 
