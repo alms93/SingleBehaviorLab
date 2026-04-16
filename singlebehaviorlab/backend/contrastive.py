@@ -158,7 +158,7 @@ def learn_behavior_features(
     all_emb = torch.from_numpy(embeddings).to(device)
 
     rng = np.random.default_rng(42)
-    pairs_per_epoch = min(n_samples * 4, 8192)
+    pairs_per_epoch = max(1024, min(n_samples * 4, 65536))
 
     _log(f"Training projection head ({in_dim} → {out_dim}) for {epochs} epochs on {device}")
     for epoch in range(epochs):
