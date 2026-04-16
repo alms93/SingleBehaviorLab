@@ -28,7 +28,9 @@ class ClusteringParams:
     n_components: int = 2
     n_neighbors: int = 15
     min_dist: float = 0.1
-    normalization: str = "standard"  # standard | minmax | l2 | none
+    normalization: str = "standard"
+    subtract_video_mean: bool = False
+    whiten: bool = False
     leiden_resolution: float = 1.0
     leiden_k: int = 15
     min_cluster_size: int = 10
@@ -157,8 +159,34 @@ def run_clustering(
     matrix_df, metadata_df = _load_matrix_metadata(matrix_path_str, metadata_path_str)
     _log(f"Matrix shape: {matrix_df.shape[0]} features × {matrix_df.shape[1]} samples")
 
-    processed = _normalize(matrix_df.T, params.normalization)
-    _log(f"Processed shape: {processed.shape} (samples × features); normalization={params.normalization}")
+    X = matrix_df.T
+    X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+    if params.subtract_video_mean and metadata_df is not None:
+        group_col = None
+        for col in ("group", "video_id"):
+            if col in metadata_df.columns:
+                group_col = col
+                break
+        snippet_col = "snippet" if "snippet" in metadata_df.columns else None
+        if group_col and snippet_col:
+            for grp in metadata_df[group_col].unique():
+                grp_snippets = metadata_df.loc[metadata_df[group_col] == grp, snippet_col].values
+                mask = X.index.isin(grp_snippets)
+                if mask.sum() > 1:
+                    X.loc[mask] -= X.loc[mask].mean(axis=0)
+            _log("Applied per-video mean subtraction")
+
+    processed = _normalize(X, params.normalization)
+
+    if params.whiten:
+        from sklearn.decomposition import PCA as _PCA
+        n_comp = min(processed.shape[0], processed.shape[1])
+        arr = _PCA(n_components=n_comp, whiten=True).fit_transform(processed.values)
+        processed = pd.DataFrame(arr, index=processed.index)
+        _log(f"Applied PCA whitening ({n_comp} components)")
+
+    _log(f"Processed shape: {processed.shape} (samples × features)")
 
     _log(
         f"Running UMAP (n_neighbors={params.n_neighbors}, "

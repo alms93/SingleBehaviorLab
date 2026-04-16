@@ -234,7 +234,23 @@ class ClusteringWidget(QWidget):
         )
         norm_row.addWidget(self.normalization_method)
         preprocess_layout.addLayout(norm_row)
-        
+
+        self.subtract_video_mean_check = QCheckBox("Subtract per-video mean")
+        self.subtract_video_mean_check.setToolTip(
+            "Remove the average embedding of each video/group before clustering.\n"
+            "Reduces sensitivity to camera setup, lighting, and background\n"
+            "while preserving within-video behavior differences."
+        )
+        preprocess_layout.addWidget(self.subtract_video_mean_check)
+
+        self.pca_whiten_check = QCheckBox("PCA whitening")
+        self.pca_whiten_check.setToolTip(
+            "Decorrelate embedding dimensions and equalize their variance.\n"
+            "Reduces dominance of high-variance nuisance factors (lighting, color)\n"
+            "without discarding any information."
+        )
+        preprocess_layout.addWidget(self.pca_whiten_check)
+
         self.preprocess_btn = QPushButton("Apply preprocessing")
         self.preprocess_btn.clicked.connect(self.apply_preprocessing)
         preprocess_layout.addWidget(self.preprocess_btn)
@@ -759,28 +775,50 @@ class ClusteringWidget(QWidget):
             # sklearn expects Samples as Rows. So we transpose.
             
             X = data.T
-            
-            # Clean infinite/NaN
-            X = X.replace([np.inf, -np.inf], np.nan)
-            
-            # Normalize
+            X = X.replace([np.inf, -np.inf], np.nan).fillna(0.0)
+
+            steps = []
+
+            if self.subtract_video_mean_check.isChecked() and self.metadata is not None:
+                group_col = None
+                for col in ("group", "video_id"):
+                    if col in self.metadata.columns:
+                        group_col = col
+                        break
+                if group_col is not None:
+                    snippet_col = "snippet" if "snippet" in self.metadata.columns else None
+                    if snippet_col:
+                        for grp in self.metadata[group_col].unique():
+                            grp_snippets = self.metadata.loc[
+                                self.metadata[group_col] == grp, snippet_col
+                            ].values
+                            mask = X.index.isin(grp_snippets)
+                            if mask.sum() > 1:
+                                X.loc[mask] -= X.loc[mask].mean(axis=0)
+                        steps.append("video-mean-sub")
+
             norm_method = self.normalization_method.currentText()
             if norm_method == 'standard':
-                scaler = StandardScaler()
-                X_norm = scaler.fit_transform(X)
+                X_norm = StandardScaler().fit_transform(X)
             elif norm_method == 'minmax':
-                scaler = MinMaxScaler()
-                X_norm = scaler.fit_transform(X)
+                X_norm = MinMaxScaler().fit_transform(X)
             elif norm_method == 'l2':
-                scaler = Normalizer(norm='l2')
-                X_norm = scaler.fit_transform(X)
+                X_norm = Normalizer(norm='l2').fit_transform(X)
             else:
-                X_norm = X
-                
-            # Store processed data (Samples x Features)
-            self.processed_data = pd.DataFrame(X_norm, index=X.index, columns=X.columns)
-            
-            self.preprocess_status.setText(f"Normalized: {norm_method}")
+                X_norm = X.values if hasattr(X, 'values') else X
+            if norm_method != 'none':
+                steps.append(norm_method)
+
+            if self.pca_whiten_check.isChecked():
+                from sklearn.decomposition import PCA
+                n_components = min(X_norm.shape[0], X_norm.shape[1])
+                pca = PCA(n_components=n_components, whiten=True)
+                X_norm = pca.fit_transform(X_norm)
+                steps.append(f"pca-whiten({n_components}d)")
+
+            self.processed_data = pd.DataFrame(X_norm, index=X.index, columns=range(X_norm.shape[1]))
+
+            self.preprocess_status.setText(f"Preprocessed: {' → '.join(steps) or 'none'}")
             self.preprocess_status.setStyleSheet("color: green;")
             
         except Exception as e:
