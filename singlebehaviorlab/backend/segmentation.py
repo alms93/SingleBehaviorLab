@@ -49,6 +49,13 @@ _CHECKPOINT_TO_CONFIG = {
     "sam2.1_hiera_large.pt": "configs/sam2.1/sam2.1_hiera_l.yaml",
 }
 
+_CHECKPOINT_URLS = {
+    "sam2.1_hiera_tiny.pt": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_tiny.pt",
+    "sam2.1_hiera_small.pt": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_small.pt",
+    "sam2.1_hiera_base_plus.pt": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_base_plus.pt",
+    "sam2.1_hiera_large.pt": "https://dl.fbaipublicfiles.com/segment_anything_2/092824/sam2.1_hiera_large.pt",
+}
+
 _CHUNK_SIZE = 200
 
 
@@ -109,10 +116,35 @@ def _resolve_checkpoint(model_name: str) -> tuple[str, str]:
     for candidate in candidates:
         if candidate.exists():
             return str(candidate), config_name
+
+    url = _CHECKPOINT_URLS.get(model_name)
+    if url:
+        dest = checkpoints_root / "checkpoints" / model_name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        import urllib.request
+        try:
+            from tqdm.auto import tqdm as _tqdm
+        except Exception:
+            _tqdm = None
+        print(f"Downloading {model_name} from {url}")
+        if _tqdm is None:
+            urllib.request.urlretrieve(url, str(dest))
+        else:
+            with urllib.request.urlopen(url) as resp:
+                total = int(resp.headers.get("Content-Length") or 0) or None
+                with _tqdm(total=total, unit="B", unit_scale=True, desc=model_name) as bar:
+                    with open(dest, "wb") as f:
+                        while True:
+                            chunk = resp.read(1024 * 256)
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            bar.update(len(chunk))
+        if dest.exists() and dest.stat().st_size > 0:
+            return str(dest), config_name
+
     raise FileNotFoundError(
-        f"SAM2 checkpoint '{model_name}' was not found in {checkpoints_root}. "
-        "Launch the GUI once to trigger the automatic download, or place the "
-        "checkpoint file manually in that directory."
+        f"SAM2 checkpoint '{model_name}' could not be downloaded or found in {checkpoints_root}."
     )
 
 
