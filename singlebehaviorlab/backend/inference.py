@@ -271,10 +271,6 @@ def run_inference_on_video(
                 agg_probs[f_start:f_end] += probs_arr[t][np.newaxis, :] * w
                 agg_counts[f_start:f_end] += w
         agg_probs = agg_probs / np.maximum(agg_counts, 1.0)
-        covered = agg_counts.squeeze(-1) > 0
-        row_sums = agg_probs[covered].sum(axis=1, keepdims=True)
-        safe_sums = np.maximum(row_sums, 1e-8)
-        agg_probs[covered] = agg_probs[covered] / safe_sums
         aggregated_frame_probs = agg_probs
 
     res_entry: dict[str, Any] = {
