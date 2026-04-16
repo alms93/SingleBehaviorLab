@@ -324,7 +324,7 @@ class InferenceWidget(QWidget):
         self._advanced_toggle.setCheckable(True)
         self._advanced_toggle.setChecked(False)
         self._advanced_toggle.setToolTip("Show/hide detailed post-processing controls")
-        self._advanced_toggle.setStyleSheet("font-size: 10px; padding: 2px 8px;")
+        self._advanced_toggle.setStyleSheet("")
         self._advanced_toggle.toggled.connect(self._toggle_advanced_controls)
         timeline_controls_layout.addWidget(self._advanced_toggle)
 
