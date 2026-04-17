@@ -1088,3 +1088,4 @@ class PostprocessingDialog(QDialog):
         w.ignore_threshold_spin.setValue(self._ignore_spin.value())
         w.use_viterbi_check.setChecked(self._viterbi.isChecked())
         w.viterbi_switch_penalty_spin.setValue(self._viterbi_penalty.value())
+        w._on_embedding_refine_changed()
