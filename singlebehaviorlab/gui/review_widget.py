@@ -142,24 +142,22 @@ class _ClipPlayer(QWidget):
 class ReviewWidget(QWidget):
     """Tab for reviewing uncertain inference clips and adding them to the dataset."""
 
-    # Emitted when the user saves accepted clips so other tabs can refresh.
     annotations_updated = pyqtSignal()
 
     def __init__(self, config: dict, parent=None):
         super().__init__(parent)
         self.config = config
 
-        # State
-        self._report: dict = {}           # loaded uncertainty report
-        self._pending: list = []          # [(entry, assigned_label), ...]
+        self._report: dict = {}
+        self._pending: list = []
         self._current_entry: dict = {}
         self._current_frames: list = []
         self._review_mode = "uncertain"
         self._review_scope = "overall"
         self._accepted_keys = set()
         self._hard_negative_keys = set()
-        self._pending_hard_negatives: list = []  # [(entry, target_class), ...]
-        self._pending_transitions: list = []  # [(entry, primary_label, frame_labels), ...]
+        self._pending_hard_negatives: list = []
+        self._pending_transitions: list = []
         self._transition_frame_combos = []
 
         self._setup_ui()
@@ -336,6 +334,7 @@ class ReviewWidget(QWidget):
         self._save_btn.setEnabled(False)
         self._save_btn.clicked.connect(self._on_save_to_annotations)
         top.addWidget(self._save_btn)
+
 
         root.addLayout(top)
 
@@ -860,7 +859,6 @@ class ReviewWidget(QWidget):
     # Actions.
 
     def _on_add(self):
-        """Register the current clip with the selected label and advance."""
         if not self._current_entry:
             return
         if self._current_entry.get("review_kind") == "transition":
@@ -1328,3 +1326,72 @@ class ReviewWidget(QWidget):
 
         if added or hard_negatives_added or transitions_added:
             self.annotations_updated.emit()
+
+        if not self._refine_exemplars or not self._results:
+            return
+        classes = self._report.get("classes", [])
+        if not classes:
+            return
+        class_to_idx = {c: i for i, c in enumerate(classes)}
+
+        from singlebehaviorlab.backend.embedding_refine import refine_clip_predictions
+
+        all_overrides = {}
+        for video_path, entry in self._results.items():
+            if not isinstance(entry, dict):
+                continue
+            clip_embs = entry.get("clip_embeddings")
+            if not isinstance(clip_embs, np.ndarray) or clip_embs.ndim != 2:
+                continue
+            predictions = entry.get("predictions", [])
+            confidences = entry.get("confidences", [])
+            n_clips = clip_embs.shape[0]
+            if n_clips != len(predictions):
+                continue
+
+            clip_labels = np.array(predictions, dtype=np.int32)
+            clip_confs = np.array(confidences, dtype=np.float32)
+            seed_labels = np.full(n_clips, -1, dtype=np.int32)
+            for ci_val in range(len(classes)):
+                mask = clip_labels == ci_val
+                if not np.any(mask):
+                    continue
+                class_confs = clip_confs[mask]
+                top_k = max(2, int(np.ceil(0.1 * len(class_confs))))
+                threshold = np.partition(class_confs, -min(top_k, len(class_confs)))[-min(top_k, len(class_confs))]
+                seed_labels[mask & (clip_confs >= threshold)] = ci_val
+            for key, info in self._refine_exemplars.items():
+                if info["video"] != video_path:
+                    continue
+                ci = int(info["clip_idx"])
+                if 0 <= ci < n_clips and info["label"] in class_to_idx:
+                    seed_labels[ci] = class_to_idx[info["label"]]
+
+            n_seeds = int(np.sum(seed_labels >= 0))
+            if n_seeds < 2:
+                continue
+
+            refined = refine_clip_predictions(
+                clip_labels, clip_embs, clip_confs,
+                seed_labels=seed_labels,
+            )
+            video_overrides = {}
+            for i in range(n_clips):
+                if refined[i] != clip_labels[i]:
+                    video_overrides[i] = int(refined[i])
+            if video_overrides:
+                all_overrides[video_path] = video_overrides
+
+        if all_overrides:
+            self.predictions_refined.emit(all_overrides)
+            total = sum(len(v) for v in all_overrides.values())
+            QMessageBox.information(
+                self, "Refinement complete",
+                f"Refined {total} clip prediction{'s' if total != 1 else ''} "
+                f"across {len(all_overrides)} video{'s' if len(all_overrides) != 1 else ''}."
+            )
+        else:
+            QMessageBox.information(
+                self, "Refinement complete",
+                "No predictions were changed by the refinement."
+            )

@@ -545,9 +545,9 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(self.review_widget)
 
     def _on_annotations_updated(self):
-        """Refresh training / labeling tabs after review saves new clips."""
         self.labeling_widget.refresh_clip_list()
         self.training_widget.refresh_annotation_info()
+
 
     def _on_tracking_completed(self, video_path: str, mask_path: str):
         """Handle tracking completion - switch to registration tab and load data."""

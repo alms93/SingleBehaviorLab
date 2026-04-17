@@ -969,15 +969,17 @@ class PostprocessingDialog(QDialog):
         ref_row = QHBoxLayout()
         self._embed_refine = QCheckBox("Embedding refinement")
         self._embed_refine.setToolTip(
-            "Use the model's internal frame embeddings to detect true behavior\n"
-            "boundaries and correct predictions via label propagation."
+            "Use clip-level embeddings to correct low-confidence predictions\n"
+            "via label propagation. Seeds the top N% most confident clips per class."
         )
         ref_row.addWidget(self._embed_refine)
-        ref_row.addWidget(QLabel("Confidence:"))
-        self._embed_refine_thresh = QDoubleSpinBox()
-        self._embed_refine_thresh.setRange(0.1, 0.99)
-        self._embed_refine_thresh.setSingleStep(0.05)
-        ref_row.addWidget(self._embed_refine_thresh)
+        ref_row.addWidget(QLabel("Top %:"))
+        self._embed_refine_pct = QSpinBox()
+        self._embed_refine_pct.setRange(1, 50)
+        self._embed_refine_pct.setValue(10)
+        self._embed_refine_pct.setSuffix("%")
+        self._embed_refine_pct.setToolTip("Percentage of most confident clips per class to use as seeds.")
+        ref_row.addWidget(self._embed_refine_pct)
         bl.addLayout(ref_row)
 
         self._show_all = QCheckBox("Show all classes (overlapping)")
@@ -1068,7 +1070,7 @@ class PostprocessingDialog(QDialog):
     def _load_from_widget(self):
         w = self._w
         self._embed_refine.setChecked(w.embedding_refine_check.isChecked())
-        self._embed_refine_thresh.setValue(w.embedding_refine_threshold.value())
+        self._embed_refine_pct.setValue(int(w.embedding_refine_threshold.value()))
         self._show_all.setChecked(w.ovr_show_all_check.isChecked())
         self._show_per_clip.setChecked(not w.frame_aggregation_check.isChecked())
         self._ignore_low.setChecked(w.use_ignore_threshold_check.isChecked())
@@ -1079,7 +1081,7 @@ class PostprocessingDialog(QDialog):
     def _apply(self):
         w = self._w
         w.embedding_refine_check.setChecked(self._embed_refine.isChecked())
-        w.embedding_refine_threshold.setValue(self._embed_refine_thresh.value())
+        w.embedding_refine_threshold.setValue(float(self._embed_refine_pct.value()))
         w.ovr_show_all_check.setChecked(self._show_all.isChecked())
         w.frame_aggregation_check.setChecked(not self._show_per_clip.isChecked())
         w.use_ignore_threshold_check.setChecked(self._ignore_low.isChecked())

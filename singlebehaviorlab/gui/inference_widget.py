@@ -303,9 +303,9 @@ class InferenceWidget(QWidget):
         self.embedding_refine_check.setVisible(False)
 
         self.embedding_refine_threshold = QDoubleSpinBox()
-        self.embedding_refine_threshold.setRange(0.1, 0.99)
-        self.embedding_refine_threshold.setSingleStep(0.05)
-        self.embedding_refine_threshold.setValue(0.70)
+        self.embedding_refine_threshold.setRange(1, 50)
+        self.embedding_refine_threshold.setSingleStep(1)
+        self.embedding_refine_threshold.setValue(10)
         self.embedding_refine_threshold.valueChanged.connect(self._on_embedding_refine_changed)
         self.embedding_refine_threshold.setVisible(False)
 
@@ -3409,9 +3409,19 @@ class InferenceWidget(QWidget):
                 from singlebehaviorlab.backend.embedding_refine import refine_clip_predictions
                 clip_labels = np.array(corrected_preds, dtype=np.int32)
                 clip_confs = np.array(self.confidences, dtype=np.float32)
+                pct = max(1, int(self.embedding_refine_threshold.value())) / 100.0
+                seed_labels = np.full(len(clip_labels), -1, dtype=np.int32)
+                for ci_val in range(num_classes):
+                    mask = clip_labels == ci_val
+                    if not np.any(mask):
+                        continue
+                    class_confs = clip_confs[mask]
+                    top_k = max(2, int(np.ceil(pct * len(class_confs))))
+                    thr = np.partition(class_confs, -min(top_k, len(class_confs)))[-min(top_k, len(class_confs))]
+                    seed_labels[mask & (clip_confs >= thr)] = ci_val
                 refined = refine_clip_predictions(
                     clip_labels, clip_embs, clip_confs,
-                    confidence_threshold=float(self.embedding_refine_threshold.value()),
+                    seed_labels=seed_labels,
                 )
                 for i in range(len(refined)):
                     if refined[i] != clip_labels[i]:

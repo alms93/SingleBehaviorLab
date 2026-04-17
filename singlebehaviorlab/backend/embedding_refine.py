@@ -13,20 +13,12 @@ def refine_clip_predictions(
     clip_embeddings: np.ndarray,
     clip_confidences: np.ndarray,
     confidence_threshold: float = 0.7,
+    seed_labels: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     """Refine per-clip predictions using label propagation on clip embeddings.
 
-    High-confidence clips seed a k-NN label-spreading graph.
-    Low-confidence clips defer to their embedding neighbors.
-
-    Args:
-        clip_labels: [N] int array of predicted class indices per clip.
-        clip_embeddings: [N, D] float array of clip-level embeddings.
-        clip_confidences: [N] float array of prediction confidence per clip.
-        confidence_threshold: clips above this are trusted as seed labels.
-
-    Returns:
-        [N] int array of refined clip labels.
+    When seed_labels is provided, those are used as hard seeds and all other
+    clips are unlabeled. Otherwise, high-confidence clips seed the graph.
     """
     from sklearn.semi_supervised import LabelSpreading
 
@@ -34,10 +26,11 @@ def refine_clip_predictions(
     if N < 4 or clip_embeddings.shape[0] != N:
         return clip_labels.copy()
 
-    labels_for_propagation = clip_labels.copy()
-    for i in range(N):
-        if clip_confidences[i] < confidence_threshold:
-            labels_for_propagation[i] = -1
+    if seed_labels is not None and len(seed_labels) == N:
+        labels_for_propagation = seed_labels.copy()
+    else:
+        labels_for_propagation = clip_labels.copy()
+        labels_for_propagation[clip_confidences < confidence_threshold] = -1
 
     n_labeled = int(np.sum(labels_for_propagation >= 0))
     if n_labeled < 2 or n_labeled == N:
@@ -49,8 +42,7 @@ def refine_clip_predictions(
     propagated = lp.transduction_
 
     result = clip_labels.copy()
-    for i in range(N):
-        if clip_confidences[i] < confidence_threshold and propagated[i] >= 0:
-            result[i] = int(propagated[i])
+    unlabeled = labels_for_propagation < 0
+    result[unlabeled] = propagated[unlabeled]
 
     return result
