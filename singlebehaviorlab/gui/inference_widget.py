@@ -3366,8 +3366,9 @@ class InferenceWidget(QWidget):
             self._aggregated_last_covered_frame = 0
             return
 
-        # Prefer the exact worker-built merged frame timeline when available.
-        # This preserves center-weighted overlap merge.
+        if not self.embedding_refine_check.isChecked():
+            self._refined_clip_overrides = {}
+
         if not self.corrected_labels and not self.embedding_refine_check.isChecked():
             precomputed = self._get_precomputed_aggregated_probs(self.video_path)
             if precomputed is not None and precomputed.ndim == 2 and precomputed.shape[1] == len(self.classes):
@@ -3401,7 +3402,7 @@ class InferenceWidget(QWidget):
         corrected_preds = self._effective_predictions()
 
         self._refined_clip_overrides = {}
-        if self.embedding_refine_check.isChecked():
+        if self.embedding_refine_check.isChecked() and self.predictions:
             clip_embs = None
             if self.video_path and self.video_path in self.results_cache:
                 clip_embs = self.results_cache[self.video_path].get("clip_embeddings")
