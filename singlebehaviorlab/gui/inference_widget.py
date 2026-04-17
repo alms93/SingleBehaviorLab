@@ -3239,6 +3239,7 @@ class InferenceWidget(QWidget):
         frame_labels = self._apply_gap_merge_and_min_seg(frame_labels, T)
 
         overrides = getattr(self, "_refined_clip_overrides", {})
+        _override_ranges = []
         if overrides and hasattr(self, "clip_starts") and self.clip_starts:
             orig_fps = self._get_video_fps(self.video_path) if self.video_path else 30.0
             fi = self._get_saved_frame_interval(self.video_path, orig_fps)
@@ -3248,6 +3249,7 @@ class InferenceWidget(QWidget):
                     cs = self.clip_starts[clip_i]
                     ce = min(cs + (cl - 1) * fi + 1, T)
                     frame_labels[cs:ce] = new_cls
+                    _override_ranges.append((cs, ce, new_cls))
 
         segments = []
         cur_cls = int(frame_labels[0])
@@ -3338,6 +3340,13 @@ class InferenceWidget(QWidget):
                         if ci != top and (top_name, self.classes[ci]) in self._allowed_cooccurrence:
                             pruned_mask[fi, ci] = True
             active_mask = pruned_mask
+            self._aggregated_active_mask = active_mask
+
+        if _override_ranges:
+            for cs, ce, new_cls in _override_ranges:
+                active_mask[cs:ce, :] = False
+                if 0 <= new_cls < C:
+                    active_mask[cs:ce, new_cls] = True
             self._aggregated_active_mask = active_mask
 
         multi_segments = []
