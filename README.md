@@ -133,8 +133,6 @@ Run `singlebehaviorlab <command> --help` for the full flag list on each subcomma
 > **Full CLI reference:** [**CLI.md**](CLI.md) — detailed per-command docs, file-format reference, Python API, and troubleshooting.
 >
 > **Notebook demos:** [**demo/**](demo/) — two Jupyter notebooks walking through behavior sequencing and segmentation/clustering end-to-end. Drop your own demo video + prompts into `demo/data/` and step through the cells.
->
-> **Try it in Colab — no install needed:** [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/alms93/SingleBehaviorLab/blob/main/demo/colab_segmentation_clustering.ipynb) Runs the full segmentation + clustering pipeline on a bundled demo video in a free Colab GPU runtime. Install takes ~5–10 minutes; the pipeline itself finishes in a few minutes.
 
 ---
 
